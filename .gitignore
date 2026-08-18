@@ -35,6 +35,8 @@
 build/
 build-*/
 out/
+CMakeUserPresets.json
+
 
 # IDE directories
 .vscode/
