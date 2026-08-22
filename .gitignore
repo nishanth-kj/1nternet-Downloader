@@ -38,6 +38,7 @@ out/
 CMakeUserPresets.json
 
 
+
 # IDE directories — .vscode/ is intentionally tracked (project config)
 .idea/
 *.swp
