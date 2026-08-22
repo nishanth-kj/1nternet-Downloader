@@ -38,7 +38,25 @@ out/
 CMakeUserPresets.json
 
 
-# IDE directories
-.vscode/
+# IDE directories — .vscode/ is intentionally tracked (project config)
 .idea/
 *.swp
+
+# Visual Studio local state
+.vs/
+
+# ── vcpkg ────────────────────────────────────────────────────────
+vcpkg_installed/
+vcpkg/
+!vcpkg.json          # manifest IS tracked
+!CMakePresets.json   # presets ARE tracked
+
+# Build output
+build/
+build-*/
+out/
+
+.env
+!.env.example
+.vscode
+

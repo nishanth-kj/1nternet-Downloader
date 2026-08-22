@@ -3,16 +3,18 @@
   "configurePresets": [
     {
       "name": "default",
-      "displayName": "Debug Build",
+      "displayName": "Default Config",
+      "description": "Default build using vcpkg toolchain",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
         "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
       "name": "release",
-      "displayName": "Release Build",
-      "binaryDir": "${sourceDir}/build",
+      "displayName": "Release Config",
+      "inherits": "default",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
@@ -21,13 +23,11 @@
   "buildPresets": [
     {
       "name": "default",
-      "configurePreset": "default",
-      "configuration": "Debug"
+      "configurePreset": "default"
     },
     {
       "name": "release",
-      "configurePreset": "release",
-      "configuration": "Release"
+      "configurePreset": "release"
     }
   ]
 }
