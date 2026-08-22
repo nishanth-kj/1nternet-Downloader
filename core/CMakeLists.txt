@@ -1,0 +1,79 @@
+cmake_minimum_required(VERSION 3.20)
+set(CMAKE_POLICY_VERSION_MINIMUM "3.5" CACHE STRING "" FORCE)
+
+# Auto-inject vcpkg toolchain if not provided by IDE presets
+if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake")
+        set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+            CACHE STRING "Vcpkg toolchain file")
+    endif()
+endif()
+
+project(InternetDownloader VERSION 1.0.0 LANGUAGES CXX)
+
+# ── language standard ────────────────────────────────────────────
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# ── vcpkg packages ───────────────────────────────────────────────
+# Add vcpkg-installed headers so the IDE can locate them immediately 
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/build/vcpkg_installed/x64-windows/include)
+
+find_package(raylib        CONFIG REQUIRED)
+find_package(CURL          CONFIG REQUIRED)
+find_package(OpenSSL              REQUIRED)
+find_package(ZLIB                 REQUIRED)
+find_package(unofficial-sqlite3  CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
+find_package(fmt           CONFIG REQUIRED)
+find_package(spdlog        CONFIG REQUIRED)
+
+# ── source files ─────────────────────────────────────────────────
+file(GLOB_RECURSE CORE_SRCS "src/*.cpp")
+
+# ── executable ───────────────────────────────────────────────────
+add_executable(InternetDownloader
+    main.cpp
+    ${CORE_SRCS}
+)
+
+target_include_directories(InternetDownloader PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+# ── link all dependencies ────────────────────────────────────────
+target_link_libraries(InternetDownloader PRIVATE
+    raylib
+    CURL::libcurl
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    ZLIB::ZLIB
+    unofficial::sqlite3::sqlite3
+    nlohmann_json::nlohmann_json
+    fmt::fmt
+    spdlog::spdlog
+)
+
+# ── Windows-only ─────────────────────────────────────────────────
+if(WIN32)
+    # WinHTTP as a fallback / supplement to libcurl
+    target_link_libraries(InternetDownloader PRIVATE winhttp ws2_32)
+
+    # Hide the console window unconditionally
+    target_link_options(InternetDownloader PRIVATE
+        /SUBSYSTEM:WINDOWS
+        /ENTRY:mainCRTStartup
+    )
+endif()
+
+# ── compiler warnings ────────────────────────────────────────────
+if(MSVC)
+    target_compile_options(InternetDownloader PRIVATE /W4 /WX-)
+else()
+    target_compile_options(InternetDownloader PRIVATE -Wall -Wextra)
+endif()
+
+# ── install ──────────────────────────────────────────────────────
+install(TARGETS InternetDownloader RUNTIME DESTINATION bin)
