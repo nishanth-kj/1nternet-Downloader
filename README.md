@@ -1,54 +1,53 @@
 # Internet Downloader
 
-A high-performance, modular, and extensible download manager built in C.
+A high-performance, modular, and extensible download manager built in modern C++.
 
 ## Features
 
-- **Multi-Protocol Support**: Supports HTTP, HTTPS, and BitTorrent out of the box.
-- **Advanced Download Management**: Pause, resume, and schedule downloads.
-- **Parallel Downloading**: Segmented chunk downloads for maximum speed.
+- **Multi-Protocol Support**: Supports HTTP and HTTPS via `libcurl`.
+- **Advanced Download Management**: Pause, resume, and schedule downloads concurrently.
 - **Robust Storage**: Efficient file and metadata management.
-- **Clean GUI**: Modern, responsive user interface.
+- **Native GUI**: Modern, native user interface built with `wxWidgets` (retained-mode) rather than a game engine loop, ensuring low CPU usage and proper desktop integration.
+
+## Architecture
+
+The project is structured entirely within the `core/` directory:
+
+- `core/src/download/` & `core/include/download/`: The core multithreaded download engine utilizing libcurl.
+- `core/src/gui/` & `core/include/gui/`: The graphical user interface utilizing `wxWidgets`.
+- `core/src/system/`, `network/`, `storage/`: Backend scaffolding.
 
 ## Build Instructions
 
-This project uses CMake for dependency management. Dependencies are fetched automatically during configure.
+This project uses **CMake** and **vcpkg** for dependency management. Dependencies (like wxWidgets and curl) are fetched and built automatically.
 
 ### Prerequisites
 - [CMake](https://cmake.org/) (3.15+)
+- Visual Studio / MSVC toolchain (on Windows)
+- `vcpkg` (Environment variable `VCPKG_ROOT` must be set)
 
-### Building the Project (Development/Debug)
-To automatically fetch dependencies and compile the project using the default preset:
+### Building the Project (Windows)
 
-```bash
-# Configure the project
-cmake --preset default
+The simplest way to build the project is by running the included PowerShell script from the `core` directory:
 
-# Build the project
-cmake --build --preset default
+```powershell
+cd core
+./scripts/build.ps1
 ```
 
-After a successful build, the main executable will be located in `build/Debug/InternetDownloader.exe` (on Windows).
+*(Note: The build script will automatically detect and load your Visual Studio `vcvars64.bat` environment to ensure the compiler and linker can find the Windows SDK).*
 
-### Building for Production (Release)
-To build a highly optimized, production-level version of the app:
+### Building Manually via CMake
+
+You can also build the project manually via standard CMake commands in the `core` directory:
 
 ```bash
-# Configure the release build
-cmake --preset release
-
-# Build the release executable
-cmake --build --preset release
+cd core
+cmake -B out/build/x64-Debug -S . -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+cmake --build out/build/x64-Debug
 ```
-The production executable will be located in `build/Release/InternetDownloader.exe`.
 
-## Project Structure
-
-- `app/`: Contains the main application entry point.
-- `core/`: The core download engine and systems (network, torrent, storage, security).
-- `gui/`: The graphical user interface components and views.
-- `docs/`: Technical documentation and development guides.
-- `tests/`: Automated unit and integration tests.
+After a successful build, the main executable will be located in `core/out/build/x64-Debug/InternetDownloader.exe`.
 
 ## License
 
