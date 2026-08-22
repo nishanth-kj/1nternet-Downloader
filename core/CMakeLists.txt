@@ -21,7 +21,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Add vcpkg-installed headers so the IDE can locate them immediately 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/build/vcpkg_installed/x64-windows/include)
 
-find_package(CURL          CONFIG REQUIRED)
+find_package(CURL REQUIRED)
 find_package(OpenSSL              REQUIRED)
 find_package(ZLIB                 REQUIRED)
 find_package(unofficial-sqlite3  CONFIG REQUIRED)
