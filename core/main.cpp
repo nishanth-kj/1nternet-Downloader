@@ -6,38 +6,27 @@
  * runs the main render loop.  All logic lives in core/src/.
  */
 
-#include <raylib.h>
-#include "include/gui/gui.h"      /* GuiState, gui_init/update/render/cleanup */
+#include <wx/wx.h>
+#include "gui/main_window.h"
 
-/* ─────────────────────────────────────────────────────────────────
- *  Entry point
- * ───────────────────────────────────────────────────────────────── */
-int main(void)
+// Define the application class
+class MyApp : public wxApp
 {
-    /* ── window ── */
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
-    InitWindow(1200, 750, "Internet Downloader");
-    SetTargetFPS(60);
-    SetWindowMinSize(900, 600);
-
-    /* ── state ── */
-    GuiState state;
-    gui_init(&state);
-
-    /* ── main loop ── */
-    while (!WindowShouldClose())
+public:
+    virtual bool OnInit()
     {
-        gui_update(&state);
+        // Call default initialization (e.g., parsing command line, settings)
+        if ( !wxApp::OnInit() )
+            return false;
 
-        BeginDrawing();
-            gui_render(&state);
-        EndDrawing();
-        SwapScreenBuffer();
-        PollInputEvents();
+        wxLogMessage("Starting Internet Downloader (wxWidgets)");
+
+        MainWindow *frame = new MainWindow("Internet Downloader");
+        frame->Show(true);
+
+        return true;
     }
+};
 
-    /* ── cleanup ── */
-    gui_cleanup(&state);
-    CloseWindow();
-    return 0;
-}
+// Implement the application entry point
+wxIMPLEMENT_APP(MyApp);

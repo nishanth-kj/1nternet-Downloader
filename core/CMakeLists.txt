@@ -21,7 +21,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Add vcpkg-installed headers so the IDE can locate them immediately 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/build/vcpkg_installed/x64-windows/include)
 
-find_package(raylib        CONFIG REQUIRED)
 find_package(CURL          CONFIG REQUIRED)
 find_package(OpenSSL              REQUIRED)
 find_package(ZLIB                 REQUIRED)
@@ -29,12 +28,13 @@ find_package(unofficial-sqlite3  CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(fmt           CONFIG REQUIRED)
 find_package(spdlog        CONFIG REQUIRED)
+find_package(wxWidgets     CONFIG REQUIRED)
 
 # ── source files ─────────────────────────────────────────────────
 file(GLOB_RECURSE CORE_SRCS "src/*.cpp")
 
 # ── executable ───────────────────────────────────────────────────
-add_executable(InternetDownloader
+add_executable(InternetDownloader WIN32
     main.cpp
     ${CORE_SRCS}
 )
@@ -45,7 +45,6 @@ target_include_directories(InternetDownloader PRIVATE
 
 # ── link all dependencies ────────────────────────────────────────
 target_link_libraries(InternetDownloader PRIVATE
-    raylib
     CURL::libcurl
     OpenSSL::SSL
     OpenSSL::Crypto
@@ -54,18 +53,14 @@ target_link_libraries(InternetDownloader PRIVATE
     nlohmann_json::nlohmann_json
     fmt::fmt
     spdlog::spdlog
+    wx::core
+    wx::base
 )
 
 # ── Windows-only ─────────────────────────────────────────────────
 if(WIN32)
     # WinHTTP as a fallback / supplement to libcurl
     target_link_libraries(InternetDownloader PRIVATE winhttp ws2_32)
-
-    # Hide the console window unconditionally
-    target_link_options(InternetDownloader PRIVATE
-        /SUBSYSTEM:WINDOWS
-        /ENTRY:mainCRTStartup
-    )
 endif()
 
 # ── compiler warnings ────────────────────────────────────────────

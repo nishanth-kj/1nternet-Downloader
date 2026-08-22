@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "A high-performance, modular C++ download manager.",
   "dependencies": [
-    "raylib",
+    "wxwidgets",
     {
       "name": "curl",
       "features": ["ssl", "http2"]
