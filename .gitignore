@@ -61,3 +61,6 @@ out/
 !.env.example
 .vscode
 
+# Android
+*.apk
+.gradle/

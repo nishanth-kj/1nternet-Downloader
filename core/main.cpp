@@ -2,8 +2,8 @@
  * main.cpp — Internet Downloader entry point
  *
  * The core/ directory is its own self-contained C++ project.
- * This file initialises Raylib, bootstraps the GUI state, and
- * runs the main render loop.  All logic lives in core/src/.
+ * This file initialises wxWidgets, bootstraps the GUI state, and
+ * runs the main event loop.  All logic lives in core/src/.
  */
 
 #include <wx/wx.h>
@@ -16,7 +16,7 @@ public:
     virtual bool OnInit()
     {
         // Call default initialization (e.g., parsing command line, settings)
-        if ( !wxApp::OnInit() )
+        if (!wxApp::OnInit())
             return false;
 
         wxLogMessage("Starting Internet Downloader (wxWidgets)");
