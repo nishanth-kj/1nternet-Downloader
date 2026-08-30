@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Download } from "lucide-react";
+import { FiDownload } from "react-icons/fi";
 
 export function DownloadSection() {
   return (
@@ -14,7 +14,7 @@ export function DownloadSection() {
             href="#"
             className="inline-flex w-full sm:w-auto items-center justify-center rounded-md bg-primary px-8 py-3 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <Download className="mr-2 h-4 w-4" /> Download for Windows
+            <FiDownload className="mr-2 h-4 w-4" /> Download for Windows
           </Link>
           <Link 
             href="https://github.com/nishanth-kj/1nternet-Downloader/releases"

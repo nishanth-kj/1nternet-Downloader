@@ -1,4 +1,4 @@
-import { Layout } from "lucide-react";
+import { FiLayout } from "react-icons/fi";
 
 export function ProductScreenshot() {
   return (
@@ -12,7 +12,7 @@ export function ProductScreenshot() {
         <div className="w-full max-w-4xl mx-auto rounded-xl border bg-card p-2 shadow-sm">
           <div className="aspect-[16/9] w-full rounded-lg bg-muted flex items-center justify-center overflow-hidden border">
             <div className="text-center p-6">
-              <Layout className="mx-auto h-12 w-12 text-muted-foreground mb-4 opacity-50" />
+              <FiLayout className="mx-auto h-12 w-12 text-muted-foreground mb-4 opacity-50" />
               <p className="text-sm font-medium text-muted-foreground">Application UI Placeholder</p>
             </div>
           </div>
