@@ -4,10 +4,11 @@
     {
       "name": "default",
       "displayName": "Default Config",
-      "description": "Default build using vcpkg toolchain",
+      "description": "Default build using global vcpkg",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/vcpkg_installed",
         "CMAKE_BUILD_TYPE": "Debug"
       }
     },
