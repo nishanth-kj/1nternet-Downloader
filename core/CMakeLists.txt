@@ -31,7 +31,11 @@ add_executable(InternetDownloader WIN32
 )
 
 target_include_directories(InternetDownloader PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/service
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/gui
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/model
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils
 )
 
 # ── link all dependencies ────────────────────────────────────────
