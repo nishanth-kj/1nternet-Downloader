@@ -50,3 +50,4 @@ public class DownloadItem {
         return String.format("%.2f %s", bytes / Math.pow(1024, digitGroups), units[digitGroups]);
     }
 }
+
