@@ -40,3 +40,4 @@ jobs:
           path: |
             core/build/Release/InternetDownloader.exe
             core/build/Release/*.dll
+
