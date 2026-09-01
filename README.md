@@ -40,6 +40,16 @@ cd core
 ### Building Manually via CMake
 
 You can also build the project manually via standard CMake commands in the `core` directory:
+```bash
+# 1. Configure CMake (auto-detects vcpkg toolchain)
+cmake -S core -B core/build
+
+# 2. Compile and Build (Debug or Release)
+cmake --build core/build --config Debug
+
+# 3. Run the Application
+.\core\build\Debug\InternetDownloader.exe
+```
 
 ```bash
 cd core
