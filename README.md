@@ -43,11 +43,12 @@ You can also build the project manually via standard CMake commands in the `core
 
 ```bash
 cd core
-cmake -B out/build/x64-Debug -S . -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
-cmake --build out/build/x64-Debug
+cmake --build core/build --config Release
+cmake --build core/build --config Debug
+cmake --build core/build --config RelWithDebInfo
 ```
 
-After a successful build, the main executable will be located in `core/out/build/x64-Debug/InternetDownloader.exe`.
+After a successful build, the main executable will be located in `core/build/Release/InternetDownloader.exe` for the Release build, `core/build/Debug/InternetDownloader.exe` for the Debug build, and `core/build/RelWithDebInfo/InternetDownloader.exe` for the RelWithDebInfo build.
 
 ## License
 
