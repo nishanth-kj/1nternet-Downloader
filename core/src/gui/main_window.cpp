@@ -306,9 +306,6 @@ void MainWindow::OnClose(wxCloseEvent& event)
     if (event.CanVeto() && !m_forceExit) {
         event.Veto();
         Hide();
-        if (m_trayIcon) {
-            m_trayIcon->ShowNotification("Internet Downloader", "App minimized to system tray. Multi-threaded downloads continue in background.");
-        }
     } else {
         Destroy();
     }
@@ -369,10 +366,6 @@ void MainWindow::OnAddDownload(wxCommandEvent& WXUNUSED(event))
 
     idr::download::DownloadManager::GetInstance().AddDownload(url.ToStdString(), destPath.ToStdString(), true);
     RefreshList();
-
-    if (m_trayIcon) {
-        m_trayIcon->ShowNotification("Download Started", wxString::Format("Accelerating download of %s", suggestedName));
-    }
 }
 
 void MainWindow::OnAddTorrent(wxCommandEvent& WXUNUSED(event))
