@@ -1,4 +1,4 @@
-// background.js — Internet Downloader Browser Extension
+// background.js — Internet Downloader Universal Browser Extension
 
 const NATIVE_APP_NAME = "com.internetdownloader.nativehost";
 
@@ -11,8 +11,14 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 
   chrome.contextMenus.create({
+    id: "idr_download_torrent",
+    title: "Download Torrent / Magnet with Internet Downloader",
+    contexts: ["link"]
+  });
+
+  chrome.contextMenus.create({
     id: "idr_download_page",
-    title: "Download Page with Internet Downloader",
+    title: "Download All Media on Page",
     contexts: ["page"]
   });
 });
@@ -25,32 +31,36 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   }
 });
 
-// Intercept browser downloads if enabled
+// Intercept browser downloads (including .torrent, .zip, .exe, etc.) if enabled
 chrome.downloads.onCreated.addListener(async (downloadItem) => {
-  const settings = await chrome.storage.local.get({ interceptDownloads: false });
-  if (settings.interceptDownloads && downloadItem.url) {
-    // Cancel browser download and forward to Internet Downloader
+  const settings = await chrome.storage.local.get({
+    interceptDownloads: true,
+    interceptTorrents: true
+  });
+
+  const isTorrent = downloadItem.url && (downloadItem.url.startsWith("magnet:") || downloadItem.url.endsWith(".torrent") || (downloadItem.filename && downloadItem.filename.endsWith(".torrent")));
+
+  if ((settings.interceptDownloads || (isTorrent && settings.interceptTorrents)) && downloadItem.url) {
     chrome.downloads.cancel(downloadItem.id);
     chrome.downloads.erase({ id: downloadItem.id });
     sendDownloadToApp(downloadItem.url, downloadItem.filename || "");
   }
 });
 
-// Dispatch URL to native app or trigger custom URI scheme
+// Dispatch URL to native app
 function sendDownloadToApp(url, title) {
   // Option 1: Custom protocol uri handler: idr://<url>
   const customSchemeUrl = `idr://${encodeURIComponent(url)}`;
-  
+
   // Option 2: Try native messaging host if configured
   try {
     const port = chrome.runtime.connectNative(NATIVE_APP_NAME);
     port.postMessage({ action: "download", url: url, title: title });
     port.onDisconnect.addListener(() => {
-      // Fallback: Notify user
-      showNotification("Download Sent", `Forwarded to Internet Downloader: ${url.substring(0, 50)}...`);
+      showNotification("Download Forwarded", `Sent to Internet Downloader: ${url.substring(0, 55)}...`);
     });
   } catch (e) {
-    showNotification("Download Captured", `Captured URL: ${url.substring(0, 50)}...`);
+    showNotification("Download Captured", `Captured: ${url.substring(0, 55)}...`);
   }
 }
 

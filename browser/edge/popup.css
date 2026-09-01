@@ -230,3 +230,4 @@ input:checked + .slider:before {
   opacity: 0;
   pointer-events: none;
 }
+

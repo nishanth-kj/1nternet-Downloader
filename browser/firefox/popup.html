@@ -16,13 +16,13 @@
       </svg>
       <span class="logo-title">Internet Downloader</span>
     </div>
-    <span class="status-badge" id="appStatus">Connected</span>
+    <span class="status-badge" id="appStatus">IDM Accelerated</span>
   </div>
 
   <div class="content">
-    <label for="urlInput" class="input-label">Download URL</label>
+    <label for="urlInput" class="input-label">Download URL / Magnet Link</label>
     <div class="input-group">
-      <input type="text" id="urlInput" placeholder="https://example.com/file.zip" autofocus>
+      <input type="text" id="urlInput" placeholder="https://... or magnet:?xt=..." autofocus>
       <button id="pasteBtn" title="Paste from clipboard">📋</button>
     </div>
 
@@ -32,7 +32,7 @@
         <polyline points="7 10 12 15 17 10"></polyline>
         <line x1="12" y1="15" x2="12" y2="3"></line>
       </svg>
-      Start Download
+      Start Accelerated Download
     </button>
 
     <div class="divider"></div>
@@ -43,6 +43,14 @@
         <span class="slider"></span>
       </label>
       <span class="toggle-label">Capture Browser Downloads</span>
+    </div>
+
+    <div class="toggle-group">
+      <label class="toggle-switch">
+        <input type="checkbox" id="torrentToggle" checked>
+        <span class="slider"></span>
+      </label>
+      <span class="toggle-label">Capture Torrents & Magnet Links</span>
     </div>
 
     <div class="quick-actions">
