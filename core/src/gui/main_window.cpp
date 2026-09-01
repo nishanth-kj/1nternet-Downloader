@@ -14,42 +14,42 @@
 
 wxBEGIN_EVENT_TABLE(MainWindow, wxFrame)
     EVT_CLOSE(MainWindow::OnClose)
-    EVT_MENU(wxID_EXIT, MainWindow::OnExit)
-    EVT_MENU(wxID_ABOUT, MainWindow::OnAbout)
-    EVT_MENU(ID_AddDownload, MainWindow::OnAddDownload)
-    EVT_MENU(ID_AddTorrent, MainWindow::OnAddTorrent)
-    EVT_MENU(ID_PauseAll, MainWindow::OnPauseAll)
-    EVT_MENU(ID_ResumeAll, MainWindow::OnResumeAll)
-    EVT_MENU(ID_ClearCompleted, MainWindow::OnClearCompleted)
-    EVT_MENU(ID_DeleteSelected, MainWindow::OnDeleteSelected)
-    EVT_MENU(ID_OpenDownloadFolder, MainWindow::OnOpenDownloadFolder)
+        EVT_MENU(wxID_EXIT, MainWindow::OnExit)
+            EVT_MENU(wxID_ABOUT, MainWindow::OnAbout)
+                EVT_MENU(ID_AddDownload, MainWindow::OnAddDownload)
+                    EVT_MENU(ID_AddTorrent, MainWindow::OnAddTorrent)
+                        EVT_MENU(ID_PauseAll, MainWindow::OnPauseAll)
+                            EVT_MENU(ID_ResumeAll, MainWindow::OnResumeAll)
+                                EVT_MENU(ID_ClearCompleted, MainWindow::OnClearCompleted)
+                                    EVT_MENU(ID_DeleteSelected, MainWindow::OnDeleteSelected)
+                                        EVT_MENU(ID_OpenDownloadFolder, MainWindow::OnOpenDownloadFolder)
 
-    EVT_TOOL(ID_AddDownload, MainWindow::OnAddDownload)
-    EVT_TOOL(ID_AddTorrent, MainWindow::OnAddTorrent)
-    EVT_TOOL(ID_PauseAll, MainWindow::OnPauseAll)
-    EVT_TOOL(ID_ResumeAll, MainWindow::OnResumeAll)
-    EVT_TOOL(ID_DeleteSelected, MainWindow::OnDeleteSelected)
-    EVT_TOOL(ID_ClearCompleted, MainWindow::OnClearCompleted)
-    EVT_TOOL(ID_OpenDownloadFolder, MainWindow::OnOpenDownloadFolder)
+                                            EVT_TOOL(ID_AddDownload, MainWindow::OnAddDownload)
+                                                EVT_TOOL(ID_AddTorrent, MainWindow::OnAddTorrent)
+                                                    EVT_TOOL(ID_PauseAll, MainWindow::OnPauseAll)
+                                                        EVT_TOOL(ID_ResumeAll, MainWindow::OnResumeAll)
+                                                            EVT_TOOL(ID_DeleteSelected, MainWindow::OnDeleteSelected)
+                                                                EVT_TOOL(ID_ClearCompleted, MainWindow::OnClearCompleted)
+                                                                    EVT_TOOL(ID_OpenDownloadFolder, MainWindow::OnOpenDownloadFolder)
 
-    EVT_LISTBOX(ID_Sidebar, MainWindow::OnSidebarSelected)
-    EVT_LIST_ITEM_RIGHT_CLICK(ID_DownloadList, MainWindow::OnListRightClick)
-    EVT_LIST_ITEM_ACTIVATED(ID_DownloadList, MainWindow::OnListDoubleClick)
+                                                                        EVT_LISTBOX(ID_Sidebar, MainWindow::OnSidebarSelected)
+                                                                            EVT_LIST_ITEM_RIGHT_CLICK(ID_DownloadList, MainWindow::OnListRightClick)
+                                                                                EVT_LIST_ITEM_ACTIVATED(ID_DownloadList, MainWindow::OnListDoubleClick)
 
-    EVT_MENU(ID_CtxPause, MainWindow::OnCtxPause)
-    EVT_MENU(ID_CtxResume, MainWindow::OnCtxResume)
-    EVT_MENU(ID_CtxRestart, MainWindow::OnCtxRestart)
-    EVT_MENU(ID_CtxOpenFile, MainWindow::OnCtxOpenFile)
-    EVT_MENU(ID_CtxOpenFolder, MainWindow::OnCtxOpenFolder)
-    EVT_MENU(ID_CtxCopyUrl, MainWindow::OnCtxCopyUrl)
-    EVT_MENU(ID_CtxRemove, MainWindow::OnCtxRemove)
-    EVT_MENU(ID_CtxDeleteFile, MainWindow::OnCtxDeleteFile)
-    EVT_MENU(ID_CtxViewSegments, MainWindow::OnCtxViewSegments)
+                                                                                    EVT_MENU(ID_CtxPause, MainWindow::OnCtxPause)
+                                                                                        EVT_MENU(ID_CtxResume, MainWindow::OnCtxResume)
+                                                                                            EVT_MENU(ID_CtxRestart, MainWindow::OnCtxRestart)
+                                                                                                EVT_MENU(ID_CtxOpenFile, MainWindow::OnCtxOpenFile)
+                                                                                                    EVT_MENU(ID_CtxOpenFolder, MainWindow::OnCtxOpenFolder)
+                                                                                                        EVT_MENU(ID_CtxCopyUrl, MainWindow::OnCtxCopyUrl)
+                                                                                                            EVT_MENU(ID_CtxRemove, MainWindow::OnCtxRemove)
+                                                                                                                EVT_MENU(ID_CtxDeleteFile, MainWindow::OnCtxDeleteFile)
+                                                                                                                    EVT_MENU(ID_CtxViewSegments, MainWindow::OnCtxViewSegments)
 
-    EVT_TIMER(ID_ProgressTimer, MainWindow::OnTimer)
-wxEND_EVENT_TABLE()
+                                                                                                                        EVT_TIMER(ID_ProgressTimer, MainWindow::OnTimer)
+                                                                                                                            wxEND_EVENT_TABLE()
 
-MainWindow::MainWindow(const wxString& title)
+                                                                                                                                MainWindow::MainWindow(const wxString &title)
     : wxFrame(NULL, wxID_ANY, title, wxDefaultPosition, wxSize(1100, 680)),
       m_progressTimer(this, ID_ProgressTimer)
 {
@@ -58,7 +58,8 @@ MainWindow::MainWindow(const wxString& title)
     // Setup Window Icon
     wxIcon appIcon;
     wxBitmap appBmp = wxArtProvider::GetBitmap(wxART_HARDDISK, wxART_FRAME_ICON, wxSize(32, 32));
-    if (appBmp.IsOk()) {
+    if (appBmp.IsOk())
+    {
         appIcon.CopyFromBitmap(appBmp);
         SetIcon(appIcon);
     }
@@ -71,7 +72,7 @@ MainWindow::MainWindow(const wxString& title)
     SetupToolbar();
 
     // Create Main Layout with Splitter
-    wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
+    wxBoxSizer *mainSizer = new wxBoxSizer(wxVERTICAL);
 
     m_splitter = new wxSplitterWindow(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSP_3D | wxSP_LIVE_UPDATE);
 
@@ -108,17 +109,18 @@ MainWindow::MainWindow(const wxString& title)
 MainWindow::~MainWindow()
 {
     m_progressTimer.Stop();
-    if (m_trayIcon) {
+    if (m_trayIcon)
+    {
         m_trayIcon->RemoveIcon();
     }
 }
 
 void MainWindow::SetupMenuBar()
 {
-    wxMenuBar* menuBar = new wxMenuBar;
+    wxMenuBar *menuBar = new wxMenuBar;
 
     // File Menu
-    wxMenu* menuFile = new wxMenu;
+    wxMenu *menuFile = new wxMenu;
     menuFile->Append(ID_AddDownload, "&Add URL Download...\tCtrl+N", "Add a new URL to download");
     menuFile->Append(ID_AddTorrent, "Add &Torrent / Magnet Link...\tCtrl+T", "Add a .torrent file or magnet link");
     menuFile->AppendSeparator();
@@ -129,11 +131,11 @@ void MainWindow::SetupMenuBar()
     menuFile->Append(wxID_EXIT, "E&xit\tCtrl+Q", "Exit the application completely");
 
     // View Menu
-    wxMenu* menuView = new wxMenu;
+    wxMenu *menuView = new wxMenu;
     menuView->Append(ID_OpenDownloadFolder, "&Open Downloads Folder\tCtrl+O", "Open default downloads directory");
 
     // Help Menu
-    wxMenu* menuHelp = new wxMenu;
+    wxMenu *menuHelp = new wxMenu;
     menuHelp->Append(wxID_ABOUT, "&About Internet Downloader", "About this software");
 
     menuBar->Append(menuFile, "&File");
@@ -191,10 +193,11 @@ void MainWindow::SetupStatusBar()
 
 static std::string FormatBytes(uint64_t bytes)
 {
-    const char* suffixes[] = {"B", "KB", "MB", "GB", "TB"};
+    const char *suffixes[] = {"B", "KB", "MB", "GB", "TB"};
     int suffixIndex = 0;
     double dBytes = static_cast<double>(bytes);
-    while (dBytes >= 1024.0 && suffixIndex < 4) {
+    while (dBytes >= 1024.0 && suffixIndex < 4)
+    {
         dBytes /= 1024.0;
         suffixIndex++;
     }
@@ -211,9 +214,11 @@ void MainWindow::RefreshList()
     double totalSpeed = 0.0;
     int activeCount = 0;
 
-    for (auto& dl : allDownloads) {
+    for (auto &dl : allDownloads)
+    {
         auto st = dl->GetStatus();
-        if (st == idr::download::DownloadStatus::Downloading) {
+        if (st == idr::download::DownloadStatus::Downloading)
+        {
             activeCount++;
             totalSpeed += dl->GetSpeedBytesPerSec();
         }
@@ -222,58 +227,94 @@ void MainWindow::RefreshList()
         std::transform(fname.begin(), fname.end(), fname.begin(), ::tolower);
 
         bool match = false;
-        switch (m_selectedCategory) {
-            case 0: match = true; break; // All
-            case 1: match = (st == idr::download::DownloadStatus::Downloading || st == idr::download::DownloadStatus::Queued); break;
-            case 2: match = (st == idr::download::DownloadStatus::Completed); break;
-            case 3: match = dl->IsTorrent(); break; // Torrents
-            case 4: match = (fname.rfind(".mp4") != std::string::npos || fname.rfind(".mkv") != std::string::npos || fname.rfind(".avi") != std::string::npos); break; // Video
-            case 5: match = (fname.rfind(".zip") != std::string::npos || fname.rfind(".rar") != std::string::npos || fname.rfind(".7z") != std::string::npos || fname.rfind(".tar") != std::string::npos); break; // Compressed
-            case 6: match = (fname.rfind(".exe") != std::string::npos || fname.rfind(".msi") != std::string::npos || fname.rfind(".iso") != std::string::npos); break; // Programs
-            case 7: match = (fname.rfind(".pdf") != std::string::npos || fname.rfind(".doc") != std::string::npos || fname.rfind(".txt") != std::string::npos); break; // Documents
+        switch (m_selectedCategory)
+        {
+        case 0:
+            match = true;
+            break; // All
+        case 1:
+            match = (st == idr::download::DownloadStatus::Downloading || st == idr::download::DownloadStatus::Queued);
+            break;
+        case 2:
+            match = (st == idr::download::DownloadStatus::Completed);
+            break;
+        case 3:
+            match = dl->IsTorrent();
+            break; // Torrents
+        case 4:
+            match = (fname.rfind(".mp4") != std::string::npos || fname.rfind(".mkv") != std::string::npos || fname.rfind(".avi") != std::string::npos);
+            break; // Video
+        case 5:
+            match = (fname.rfind(".zip") != std::string::npos || fname.rfind(".rar") != std::string::npos || fname.rfind(".7z") != std::string::npos || fname.rfind(".tar") != std::string::npos);
+            break; // Compressed
+        case 6:
+            match = (fname.rfind(".exe") != std::string::npos || fname.rfind(".msi") != std::string::npos || fname.rfind(".iso") != std::string::npos);
+            break; // Programs
+        case 7:
+            match = (fname.rfind(".pdf") != std::string::npos || fname.rfind(".doc") != std::string::npos || fname.rfind(".txt") != std::string::npos);
+            break; // Documents
         }
-        if (match) {
+        if (match)
+        {
             filtered.push_back(dl);
         }
     }
 
-    while (m_downloadList->GetItemCount() > static_cast<int>(filtered.size())) {
+    while (m_downloadList->GetItemCount() > static_cast<int>(filtered.size()))
+    {
         m_downloadList->DeleteItem(m_downloadList->GetItemCount() - 1);
     }
-    while (m_downloadList->GetItemCount() < static_cast<int>(filtered.size())) {
+    while (m_downloadList->GetItemCount() < static_cast<int>(filtered.size()))
+    {
         m_downloadList->InsertItem(m_downloadList->GetItemCount(), "");
     }
 
-    for (size_t i = 0; i < filtered.size(); ++i) {
-        auto& dl = filtered[i];
+    for (size_t i = 0; i < filtered.size(); ++i)
+    {
+        auto &dl = filtered[i];
 
         uint64_t total = dl->GetTotalBytes();
         uint64_t dled = dl->GetDownloadedBytes();
         double speed = dl->GetSpeedBytesPerSec();
 
         std::string progressStr = "0%";
-        if (total > 0) {
+        if (total > 0)
+        {
             double percent = (static_cast<double>(dled) / static_cast<double>(total)) * 100.0;
-            if (percent > 100.0) percent = 100.0;
+            if (percent > 100.0)
+                percent = 100.0;
             std::stringstream stream;
             stream << std::fixed << std::setprecision(1) << percent << "%";
             progressStr = stream.str();
-        } else if (dled > 0) {
+        }
+        else if (dled > 0)
+        {
             progressStr = FormatBytes(dled);
         }
 
         std::string statusStr = "Unknown";
-        switch (dl->GetStatus()) {
-            case idr::download::DownloadStatus::Queued: statusStr = "Queued"; break;
-            case idr::download::DownloadStatus::Downloading: statusStr = dl->IsTorrent() ? "Downloading" : "Accelerating"; break;
-            case idr::download::DownloadStatus::Paused: statusStr = "Paused"; break;
-            case idr::download::DownloadStatus::Completed: statusStr = dl->IsTorrent() ? "Seeding" : "Completed"; break;
-            case idr::download::DownloadStatus::Error: statusStr = "Error"; break;
+        switch (dl->GetStatus())
+        {
+        case idr::download::DownloadStatus::Queued:
+            statusStr = "Queued";
+            break;
+        case idr::download::DownloadStatus::Downloading:
+            statusStr = dl->IsTorrent() ? "Downloading" : "Accelerating";
+            break;
+        case idr::download::DownloadStatus::Paused:
+            statusStr = "Paused";
+            break;
+        case idr::download::DownloadStatus::Completed:
+            statusStr = dl->IsTorrent() ? "Seeding" : "Completed";
+            break;
+        case idr::download::DownloadStatus::Error:
+            statusStr = "Error";
+            break;
         }
 
         std::string connInfo = dl->IsTorrent()
-            ? (std::to_string(dl->GetPeers()) + " peers")
-            : (std::to_string(dl->GetSegmentCount()) + " threads");
+                                   ? (std::to_string(dl->GetPeers()) + " peers")
+                                   : (std::to_string(dl->GetSegmentCount()) + " threads");
 
         m_downloadList->SetItem(static_cast<long>(i), 0, wxString::Format("%d", dl->GetId()));
         m_downloadList->SetItem(static_cast<long>(i), 1, wxString::FromUTF8(dl->GetFilename()));
@@ -295,18 +336,22 @@ void MainWindow::RefreshList()
 int MainWindow::GetSelectedDownloadId()
 {
     long item = m_downloadList->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
-    if (item != -1) {
+    if (item != -1)
+    {
         return static_cast<int>(m_downloadList->GetItemData(item));
     }
     return -1;
 }
 
-void MainWindow::OnClose(wxCloseEvent& event)
+void MainWindow::OnClose(wxCloseEvent &event)
 {
-    if (event.CanVeto() && !m_forceExit) {
+    if (event.CanVeto() && !m_forceExit)
+    {
         event.Veto();
         Hide();
-    } else {
+    }
+    else
+    {
         Destroy();
     }
 }
@@ -317,27 +362,30 @@ void MainWindow::ForceExit()
     Close(true);
 }
 
-void MainWindow::OnExit(wxCommandEvent& WXUNUSED(event))
+void MainWindow::OnExit(wxCommandEvent &WXUNUSED(event))
 {
     ForceExit();
 }
 
-void MainWindow::OnAbout(wxCommandEvent& WXUNUSED(event))
+void MainWindow::OnAbout(wxCommandEvent &WXUNUSED(event))
 {
     wxMessageBox("Internet Downloader v1.0.0\n\nHigh-Performance Accelerated Download Manager\nSupports Multi-Segment HTTP/HTTPS & BitTorrent / Magnet links.\nBuilt with C++, wxWidgets, libcurl & sqlite-orm.",
                  "About Internet Downloader", wxOK | wxICON_INFORMATION, this);
 }
 
-void MainWindow::OnAddDownload(wxCommandEvent& WXUNUSED(event))
+void MainWindow::OnAddDownload(wxCommandEvent &WXUNUSED(event))
 {
     wxString defaultUrl = "https://speed.hetzner.de/100MB.bin";
 
-    if (wxTheClipboard->Open()) {
-        if (wxTheClipboard->IsSupported(wxDF_TEXT)) {
+    if (wxTheClipboard->Open())
+    {
+        if (wxTheClipboard->IsSupported(wxDF_TEXT))
+        {
             wxTextDataObject data;
             wxTheClipboard->GetData(data);
             wxString clipText = data.GetText().Trim().Trim(false);
-            if (clipText.StartsWith("http://") || clipText.StartsWith("https://") || clipText.StartsWith("ftp://") || clipText.StartsWith("magnet:?")) {
+            if (clipText.StartsWith("http://") || clipText.StartsWith("https://") || clipText.StartsWith("ftp://") || clipText.StartsWith("magnet:?"))
+            {
                 defaultUrl = clipText;
             }
         }
@@ -345,22 +393,27 @@ void MainWindow::OnAddDownload(wxCommandEvent& WXUNUSED(event))
     }
 
     wxTextEntryDialog urlDlg(this, "Enter Download URL or Magnet Link:", "Add New Accelerated Download", defaultUrl);
-    if (urlDlg.ShowModal() != wxID_OK) return;
+    if (urlDlg.ShowModal() != wxID_OK)
+        return;
 
     wxString url = urlDlg.GetValue().Trim().Trim(false);
-    if (url.IsEmpty()) return;
+    if (url.IsEmpty())
+        return;
 
     wxString suggestedName = url.AfterLast('/');
-    if (suggestedName.Find('?') != wxNOT_FOUND) {
+    if (suggestedName.Find('?') != wxNOT_FOUND)
+    {
         suggestedName = suggestedName.BeforeFirst('?');
     }
-    if (suggestedName.IsEmpty() || url.StartsWith("magnet:?")) {
+    if (suggestedName.IsEmpty() || url.StartsWith("magnet:?"))
+    {
         suggestedName = url.StartsWith("magnet:?") ? "torrent_download.dat" : "download.dat";
     }
 
     wxFileDialog saveDlg(this, "Save File As", "", suggestedName,
                          "All Files (*.*)|*.*", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
-    if (saveDlg.ShowModal() != wxID_OK) return;
+    if (saveDlg.ShowModal() != wxID_OK)
+        return;
 
     wxString destPath = saveDlg.GetPath();
 
@@ -368,67 +421,75 @@ void MainWindow::OnAddDownload(wxCommandEvent& WXUNUSED(event))
     RefreshList();
 }
 
-void MainWindow::OnAddTorrent(wxCommandEvent& WXUNUSED(event))
+void MainWindow::OnAddTorrent(wxCommandEvent &WXUNUSED(event))
 {
     wxFileDialog openDlg(this, "Select .torrent File", "", "",
                          "Torrent Files (*.torrent)|*.torrent|All Files (*.*)|*.*", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
 
-    if (openDlg.ShowModal() == wxID_OK) {
+    if (openDlg.ShowModal() == wxID_OK)
+    {
         wxString torrentPath = openDlg.GetPath();
         wxString defaultDest = openDlg.GetFilename().BeforeLast('.') + ".download";
 
         wxFileDialog saveDlg(this, "Save Torrent Payload To", "", defaultDest,
                              "All Files (*.*)|*.*", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
-        if (saveDlg.ShowModal() == wxID_OK) {
+        if (saveDlg.ShowModal() == wxID_OK)
+        {
             idr::download::DownloadManager::GetInstance().AddDownload(torrentPath.ToStdString(), saveDlg.GetPath().ToStdString(), true);
             RefreshList();
         }
     }
 }
 
-void MainWindow::OnPauseAll(wxCommandEvent& WXUNUSED(event))
+void MainWindow::OnPauseAll(wxCommandEvent &WXUNUSED(event))
 {
     idr::download::DownloadManager::GetInstance().PauseAll();
     RefreshList();
 }
 
-void MainWindow::OnResumeAll(wxCommandEvent& WXUNUSED(event))
+void MainWindow::OnResumeAll(wxCommandEvent &WXUNUSED(event))
 {
     idr::download::DownloadManager::GetInstance().ResumeAll();
     RefreshList();
 }
 
-void MainWindow::OnClearCompleted(wxCommandEvent& WXUNUSED(event))
+void MainWindow::OnClearCompleted(wxCommandEvent &WXUNUSED(event))
 {
     idr::download::DownloadManager::GetInstance().ClearCompleted();
     RefreshList();
 }
 
-void MainWindow::OnDeleteSelected(wxCommandEvent& WXUNUSED(event))
+void MainWindow::OnDeleteSelected(wxCommandEvent &WXUNUSED(event))
 {
     int id = GetSelectedDownloadId();
-    if (id <= 0) {
+    if (id <= 0)
+    {
         wxMessageBox("Please select a download to delete.", "No Selection", wxOK | wxICON_INFORMATION, this);
         return;
     }
 
     int res = wxMessageBox("Are you sure you want to remove this download?", "Confirm Delete", wxYES_NO | wxICON_QUESTION, this);
-    if (res == wxYES) {
+    if (res == wxYES)
+    {
         idr::download::DownloadManager::GetInstance().RemoveDownload(id, false);
         RefreshList();
     }
 }
 
-void MainWindow::OnOpenDownloadFolder(wxCommandEvent& WXUNUSED(event))
+void MainWindow::OnOpenDownloadFolder(wxCommandEvent &WXUNUSED(event))
 {
     int id = GetSelectedDownloadId();
-    if (id > 0) {
+    if (id > 0)
+    {
         auto downloads = idr::download::DownloadManager::GetInstance().GetDownloads();
-        for (auto& dl : downloads) {
-            if (dl->GetId() == id) {
+        for (auto &dl : downloads)
+        {
+            if (dl->GetId() == id)
+            {
                 wxFileName fn(dl->GetDestination());
                 wxString folderPath = fn.GetPath();
-                if (!folderPath.IsEmpty() && wxDirExists(folderPath)) {
+                if (!folderPath.IsEmpty() && wxDirExists(folderPath))
+                {
                     wxLaunchDefaultApplication(folderPath);
                     return;
                 }
@@ -438,40 +499,48 @@ void MainWindow::OnOpenDownloadFolder(wxCommandEvent& WXUNUSED(event))
     wxLaunchDefaultApplication(wxGetCwd());
 }
 
-void MainWindow::OnSidebarSelected(wxCommandEvent& event)
+void MainWindow::OnSidebarSelected(wxCommandEvent &event)
 {
     m_selectedCategory = event.GetSelection();
     RefreshList();
 }
 
-void MainWindow::OnListRightClick(wxListEvent& event)
+void MainWindow::OnListRightClick(wxListEvent &event)
 {
     int id = static_cast<int>(event.GetData());
-    if (id <= 0) return;
+    if (id <= 0)
+        return;
 
     auto downloads = idr::download::DownloadManager::GetInstance().GetDownloads();
     std::shared_ptr<idr::download::Download> targetDl = nullptr;
-    for (auto& dl : downloads) {
-        if (dl->GetId() == id) {
+    for (auto &dl : downloads)
+    {
+        if (dl->GetId() == id)
+        {
             targetDl = dl;
             break;
         }
     }
-    if (!targetDl) return;
+    if (!targetDl)
+        return;
 
     wxMenu menu;
     auto status = targetDl->GetStatus();
 
-    if (status == idr::download::DownloadStatus::Downloading) {
+    if (status == idr::download::DownloadStatus::Downloading)
+    {
         menu.Append(ID_CtxPause, "&Pause");
-    } else if (status == idr::download::DownloadStatus::Paused || status == idr::download::DownloadStatus::Error) {
+    }
+    else if (status == idr::download::DownloadStatus::Paused || status == idr::download::DownloadStatus::Error)
+    {
         menu.Append(ID_CtxResume, "&Resume");
     }
     menu.Append(ID_CtxRestart, "Re&start");
     menu.Append(ID_CtxViewSegments, "View &Connections (IDM Segments)...");
     menu.AppendSeparator();
 
-    if (status == idr::download::DownloadStatus::Completed) {
+    if (status == idr::download::DownloadStatus::Completed)
+    {
         menu.Append(ID_CtxOpenFile, "&Open File");
     }
     menu.Append(ID_CtxOpenFolder, "Open &Containing Folder");
@@ -483,19 +552,27 @@ void MainWindow::OnListRightClick(wxListEvent& event)
     PopupMenu(&menu);
 }
 
-void MainWindow::OnListDoubleClick(wxListEvent& event)
+void MainWindow::OnListDoubleClick(wxListEvent &event)
 {
     int id = static_cast<int>(event.GetData());
-    if (id <= 0) return;
+    if (id <= 0)
+        return;
 
     auto downloads = idr::download::DownloadManager::GetInstance().GetDownloads();
-    for (auto& dl : downloads) {
-        if (dl->GetId() == id) {
-            if (dl->GetStatus() == idr::download::DownloadStatus::Completed) {
+    for (auto &dl : downloads)
+    {
+        if (dl->GetId() == id)
+        {
+            if (dl->GetStatus() == idr::download::DownloadStatus::Completed)
+            {
                 wxLaunchDefaultApplication(dl->GetDestination());
-            } else if (dl->GetStatus() == idr::download::DownloadStatus::Downloading) {
+            }
+            else if (dl->GetStatus() == idr::download::DownloadStatus::Downloading)
+            {
                 dl->Pause();
-            } else {
+            }
+            else
+            {
                 dl->Resume();
             }
             RefreshList();
@@ -504,40 +581,46 @@ void MainWindow::OnListDoubleClick(wxListEvent& event)
     }
 }
 
-void MainWindow::OnCtxPause(wxCommandEvent& WXUNUSED(event))
+void MainWindow::OnCtxPause(wxCommandEvent &WXUNUSED(event))
 {
     int id = GetSelectedDownloadId();
-    if (id > 0) {
+    if (id > 0)
+    {
         idr::download::DownloadManager::GetInstance().PauseDownload(id);
         RefreshList();
     }
 }
 
-void MainWindow::OnCtxResume(wxCommandEvent& WXUNUSED(event))
+void MainWindow::OnCtxResume(wxCommandEvent &WXUNUSED(event))
 {
     int id = GetSelectedDownloadId();
-    if (id > 0) {
+    if (id > 0)
+    {
         idr::download::DownloadManager::GetInstance().ResumeDownload(id);
         RefreshList();
     }
 }
 
-void MainWindow::OnCtxRestart(wxCommandEvent& WXUNUSED(event))
+void MainWindow::OnCtxRestart(wxCommandEvent &WXUNUSED(event))
 {
     int id = GetSelectedDownloadId();
-    if (id > 0) {
+    if (id > 0)
+    {
         idr::download::DownloadManager::GetInstance().RestartDownload(id);
         RefreshList();
     }
 }
 
-void MainWindow::OnCtxOpenFile(wxCommandEvent& WXUNUSED(event))
+void MainWindow::OnCtxOpenFile(wxCommandEvent &WXUNUSED(event))
 {
     int id = GetSelectedDownloadId();
-    if (id > 0) {
+    if (id > 0)
+    {
         auto downloads = idr::download::DownloadManager::GetInstance().GetDownloads();
-        for (auto& dl : downloads) {
-            if (dl->GetId() == id) {
+        for (auto &dl : downloads)
+        {
+            if (dl->GetId() == id)
+            {
                 wxLaunchDefaultApplication(dl->GetDestination());
                 break;
             }
@@ -545,19 +628,23 @@ void MainWindow::OnCtxOpenFile(wxCommandEvent& WXUNUSED(event))
     }
 }
 
-void MainWindow::OnCtxOpenFolder(wxCommandEvent& event)
+void MainWindow::OnCtxOpenFolder(wxCommandEvent &event)
 {
     OnOpenDownloadFolder(event);
 }
 
-void MainWindow::OnCtxCopyUrl(wxCommandEvent& WXUNUSED(event))
+void MainWindow::OnCtxCopyUrl(wxCommandEvent &WXUNUSED(event))
 {
     int id = GetSelectedDownloadId();
-    if (id > 0) {
+    if (id > 0)
+    {
         auto downloads = idr::download::DownloadManager::GetInstance().GetDownloads();
-        for (auto& dl : downloads) {
-            if (dl->GetId() == id) {
-                if (wxTheClipboard->Open()) {
+        for (auto &dl : downloads)
+        {
+            if (dl->GetId() == id)
+            {
+                if (wxTheClipboard->Open())
+                {
                     wxTheClipboard->SetData(new wxTextDataObject(dl->GetUrl()));
                     wxTheClipboard->Close();
                 }
@@ -567,46 +654,56 @@ void MainWindow::OnCtxCopyUrl(wxCommandEvent& WXUNUSED(event))
     }
 }
 
-void MainWindow::OnCtxRemove(wxCommandEvent& WXUNUSED(event))
+void MainWindow::OnCtxRemove(wxCommandEvent &WXUNUSED(event))
 {
     int id = GetSelectedDownloadId();
-    if (id > 0) {
+    if (id > 0)
+    {
         idr::download::DownloadManager::GetInstance().RemoveDownload(id, false);
         RefreshList();
     }
 }
 
-void MainWindow::OnCtxDeleteFile(wxCommandEvent& WXUNUSED(event))
+void MainWindow::OnCtxDeleteFile(wxCommandEvent &WXUNUSED(event))
 {
     int id = GetSelectedDownloadId();
-    if (id > 0) {
+    if (id > 0)
+    {
         int res = wxMessageBox("Are you sure you want to permanently delete the downloaded file from disk?",
                                "Confirm File Deletion", wxYES_NO | wxICON_WARNING, this);
-        if (res == wxYES) {
+        if (res == wxYES)
+        {
             idr::download::DownloadManager::GetInstance().RemoveDownload(id, true);
             RefreshList();
         }
     }
 }
 
-void MainWindow::OnCtxViewSegments(wxCommandEvent& WXUNUSED(event))
+void MainWindow::OnCtxViewSegments(wxCommandEvent &WXUNUSED(event))
 {
     int id = GetSelectedDownloadId();
-    if (id <= 0) return;
+    if (id <= 0)
+        return;
 
     auto downloads = idr::download::DownloadManager::GetInstance().GetDownloads();
-    for (auto& dl : downloads) {
-        if (dl->GetId() == id) {
+    for (auto &dl : downloads)
+    {
+        if (dl->GetId() == id)
+        {
             auto segs = dl->GetSegments();
             wxString msg = wxString::Format("File: %s\nConnections: %d parallel threads\nSpeed: %s/s\n\n",
                                             dl->GetFilename(),
                                             dl->GetSegmentCount(),
                                             FormatBytes(static_cast<uint64_t>(dl->GetSpeedBytesPerSec())));
 
-            if (segs.empty()) {
+            if (segs.empty())
+            {
                 msg += "Single-stream mode active (Server does not support Range chunks).";
-            } else {
-                for (size_t s = 0; s < segs.size(); ++s) {
+            }
+            else
+            {
+                for (size_t s = 0; s < segs.size(); ++s)
+                {
                     msg += wxString::Format("• Thread #%zu: Range %llu - %llu (%s)\n",
                                             s + 1, segs[s].startOffset, segs[s].endOffset,
                                             segs[s].isCompleted ? "Done" : "Downloading");
@@ -619,7 +716,7 @@ void MainWindow::OnCtxViewSegments(wxCommandEvent& WXUNUSED(event))
     }
 }
 
-void MainWindow::OnTimer(wxTimerEvent& WXUNUSED(event))
+void MainWindow::OnTimer(wxTimerEvent &WXUNUSED(event))
 {
     RefreshList();
 }
