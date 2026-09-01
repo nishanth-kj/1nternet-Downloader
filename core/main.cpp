@@ -19,8 +19,6 @@ public:
         if (!wxApp::OnInit())
             return false;
 
-        wxLogMessage("Starting Internet Downloader (wxWidgets)");
-
         MainWindow *frame = new MainWindow("Internet Downloader");
         frame->Show(true);
 
