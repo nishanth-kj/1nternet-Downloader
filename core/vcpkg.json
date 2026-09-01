@@ -13,6 +13,7 @@
     "sqlite3",
     "nlohmann-json",
     "fmt",
-    "spdlog"
+    "spdlog",
+    "sqlite-orm"
   ]
 }

@@ -1,0 +1,35 @@
+#include <string>
+#include <sqlite_orm/sqlite_orm.h>
+
+namespace idr {
+namespace model {
+
+// -----------------------------------------------------------------------------
+// TOP: Define the Model
+// -----------------------------------------------------------------------------
+struct FileManagerModel {
+    int file_managers_id;
+    std::string directory_path;
+    int64_t total_files;
+    int64_t created_at;
+    int64_t updated_at;
+};
+
+// -----------------------------------------------------------------------------
+// BOTTOM: Define the ORM Storage
+// -----------------------------------------------------------------------------
+inline auto InitFileManagerStorage(const std::string& dbPath) {
+    using namespace sqlite_orm;
+    return make_storage(dbPath,
+        make_table("file_managers",
+            make_column("file_managers_id", &FileManagerModel::file_managers_id, primary_key().autoincrement()),
+            make_column("directory_path", &FileManagerModel::directory_path),
+            make_column("total_files", &FileManagerModel::total_files),
+            make_column("created_at", &FileManagerModel::created_at),
+            make_column("updated_at", &FileManagerModel::updated_at)
+        )
+    );
+}
+
+} // namespace model
+} // namespace idr
