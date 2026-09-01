@@ -70,3 +70,4 @@ endif()
 
 # ── install ──────────────────────────────────────────────────────
 install(TARGETS InternetDownloader RUNTIME DESTINATION bin)
+
