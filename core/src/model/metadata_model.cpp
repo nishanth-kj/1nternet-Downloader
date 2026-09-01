@@ -4,13 +4,15 @@
 namespace idr {
 namespace model {
 
+using namespace std;
+
 // -----------------------------------------------------------------------------
 // TOP: Define the Model
 // -----------------------------------------------------------------------------
 struct MetadataModel {
     int metadata_id;
-    std::string key;
-    std::string value;
+    string key;
+    string value;
     int64_t created_at;
     int64_t updated_at;
 };
@@ -18,7 +20,7 @@ struct MetadataModel {
 // -----------------------------------------------------------------------------
 // BOTTOM: Define the ORM Storage
 // -----------------------------------------------------------------------------
-inline auto InitMetadataStorage(const std::string& dbPath) {
+inline auto InitMetadataStorage(const string& dbPath) {
     using namespace sqlite_orm;
     return make_storage(dbPath,
         make_table("metadata",

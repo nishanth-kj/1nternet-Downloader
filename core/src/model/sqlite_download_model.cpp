@@ -4,19 +4,21 @@
 namespace idr {
 namespace model {
 
+using namespace std;
+
 // -----------------------------------------------------------------------------
 // TOP: Define the Model
 // -----------------------------------------------------------------------------
 struct DownloadModel {
     int downloads_id;
-    std::string url;
-    std::string destination;
-    std::string filename;
+    string url;
+    string destination;
+    string filename;
     int64_t total_bytes;
     int64_t downloaded_bytes;
     int status;
-    std::string mime_type;
-    std::string checksum;
+    string mime_type;
+    string checksum;
     int64_t created_at;
     int64_t updated_at;
 };
@@ -24,7 +26,7 @@ struct DownloadModel {
 // -----------------------------------------------------------------------------
 // BOTTOM: Define the ORM Storage
 // -----------------------------------------------------------------------------
-inline auto InitDownloadStorage(const std::string& dbPath) {
+inline auto InitDownloadStorage(const string& dbPath) {
     using namespace sqlite_orm;
     return make_storage(dbPath,
         make_table("downloads",

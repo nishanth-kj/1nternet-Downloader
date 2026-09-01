@@ -5,12 +5,14 @@
 namespace idr {
 namespace model {
 
+using namespace std;
+
 // -----------------------------------------------------------------------------
 // TOP: Define the Model
 // -----------------------------------------------------------------------------
 struct HistoryModel {
     int history_id;
-    std::string download_url;
+    string download_url;
     int status;
     int64_t created_at;
     int64_t updated_at;
@@ -19,7 +21,7 @@ struct HistoryModel {
 // -----------------------------------------------------------------------------
 // BOTTOM: Define the ORM Storage
 // -----------------------------------------------------------------------------
-inline auto InitHistoryStorage(const std::string& dbPath) {
+inline auto InitHistoryStorage(const string& dbPath) {
     using namespace sqlite_orm;
     return make_storage(dbPath,
         make_table("history",

@@ -4,12 +4,14 @@
 namespace idr {
 namespace model {
 
+using namespace std;
+
 // -----------------------------------------------------------------------------
 // TOP: Define the Model
 // -----------------------------------------------------------------------------
 struct FileManagerModel {
     int file_managers_id;
-    std::string directory_path;
+    string directory_path;
     int64_t total_files;
     int64_t created_at;
     int64_t updated_at;
@@ -18,7 +20,7 @@ struct FileManagerModel {
 // -----------------------------------------------------------------------------
 // BOTTOM: Define the ORM Storage
 // -----------------------------------------------------------------------------
-inline auto InitFileManagerStorage(const std::string& dbPath) {
+inline auto InitFileManagerStorage(const string& dbPath) {
     using namespace sqlite_orm;
     return make_storage(dbPath,
         make_table("file_managers",
