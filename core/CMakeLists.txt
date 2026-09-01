@@ -18,7 +18,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # ── vcpkg packages ───────────────────────────────────────────────
 
 find_package(CURL REQUIRED)
-find_package(OpenSSL              REQUIRED)
 find_package(ZLIB                 REQUIRED)
 find_package(unofficial-sqlite3  CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
@@ -47,8 +46,6 @@ target_include_directories(InternetDownloader PRIVATE
 # ── link all dependencies ────────────────────────────────────────
 target_link_libraries(InternetDownloader PRIVATE
     CURL::libcurl
-    OpenSSL::SSL
-    OpenSSL::Crypto
     ZLIB::ZLIB
     unofficial::sqlite3::sqlite3
     nlohmann_json::nlohmann_json
@@ -61,8 +58,7 @@ target_link_libraries(InternetDownloader PRIVATE
 
 # ── Windows-only ─────────────────────────────────────────────────
 if(WIN32)
-    # WinHTTP as a fallback / supplement to libcurl
-    target_link_libraries(InternetDownloader PRIVATE winhttp ws2_32)
+    target_link_libraries(InternetDownloader PRIVATE winhttp ws2_32 crypt32 bcrypt)
 endif()
 
 # ── compiler warnings ────────────────────────────────────────────
