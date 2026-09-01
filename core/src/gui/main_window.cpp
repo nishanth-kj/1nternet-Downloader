@@ -6,13 +6,13 @@
 #include <sstream>
 
 wxBEGIN_EVENT_TABLE(MainWindow, wxFrame)
-    EVT_MENU(wxID_EXIT,  MainWindow::OnExit)
-    EVT_MENU(wxID_ABOUT, MainWindow::OnAbout)
-    EVT_TOOL(ID_AddDownload, MainWindow::OnAddDownload)
-    EVT_TIMER(ID_ProgressTimer, MainWindow::OnTimer)
-wxEND_EVENT_TABLE()
+    EVT_MENU(wxID_EXIT, MainWindow::OnExit)
+        EVT_MENU(wxID_ABOUT, MainWindow::OnAbout)
+            EVT_TOOL(ID_AddDownload, MainWindow::OnAddDownload)
+                EVT_TIMER(ID_ProgressTimer, MainWindow::OnTimer)
+                    wxEND_EVENT_TABLE()
 
-MainWindow::MainWindow(const wxString& title)
+                        MainWindow::MainWindow(const wxString &title)
     : wxFrame(NULL, wxID_ANY, title, wxDefaultPosition, wxSize(1000, 700)),
       m_progressTimer(this, ID_ProgressTimer)
 {
@@ -29,14 +29,14 @@ MainWindow::MainWindow(const wxString& title)
     SetMenuBar(menuBar);
 
     // Create main sizer
-    wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
+    wxBoxSizer *mainSizer = new wxBoxSizer(wxVERTICAL);
 
     // Setup Toolbar
     SetupToolbar();
 
     // Create Splitter Window
     m_splitter = new wxSplitterWindow(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSP_3D | wxSP_LIVE_UPDATE);
-    
+
     // Create Sidebar
     wxArrayString sidebarChoices;
     sidebarChoices.Add("All Downloads");
@@ -68,7 +68,7 @@ MainWindow::MainWindow(const wxString& title)
 void MainWindow::SetupToolbar()
 {
     m_toolbar = CreateToolBar();
-    
+
     wxBitmap bmpAdd = wxArtProvider::GetBitmap(wxART_PLUS, wxART_TOOLBAR, wxSize(24, 24));
     wxBitmap bmpPause = wxArtProvider::GetBitmap(wxART_MINUS, wxART_TOOLBAR, wxSize(24, 24));
     wxBitmap bmpResume = wxArtProvider::GetBitmap(wxART_GO_FORWARD, wxART_TOOLBAR, wxSize(24, 24));
@@ -77,14 +77,14 @@ void MainWindow::SetupToolbar()
     m_toolbar->AddSeparator();
     m_toolbar->AddTool(ID_PauseAll, "Pause All", bmpPause, "Pause all active downloads");
     m_toolbar->AddTool(ID_ResumeAll, "Resume All", bmpResume, "Resume all paused downloads");
-    
+
     m_toolbar->Realize();
 }
 
 void MainWindow::SetupListCtrl()
 {
     m_downloadList = new wxListCtrl(m_splitter, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT);
-    
+
     m_downloadList->InsertColumn(0, "Filename", wxLIST_FORMAT_LEFT, 350);
     m_downloadList->InsertColumn(1, "Size", wxLIST_FORMAT_RIGHT, 100);
     m_downloadList->InsertColumn(2, "Progress", wxLIST_FORMAT_RIGHT, 150);
@@ -92,11 +92,13 @@ void MainWindow::SetupListCtrl()
     m_downloadList->InsertColumn(4, "Status", wxLIST_FORMAT_LEFT, 150);
 }
 
-static std::string FormatBytes(uint64_t bytes) {
-    const char* suffixes[] = {"B", "KB", "MB", "GB", "TB"};
+static std::string FormatBytes(uint64_t bytes)
+{
+    const char *suffixes[] = {"B", "KB", "MB", "GB", "TB"};
     int suffixIndex = 0;
     double dBytes = bytes;
-    while (dBytes >= 1024 && suffixIndex < 4) {
+    while (dBytes >= 1024 && suffixIndex < 4)
+    {
         dBytes /= 1024;
         suffixIndex++;
     }
@@ -108,21 +110,24 @@ static std::string FormatBytes(uint64_t bytes) {
 void MainWindow::RefreshList()
 {
     auto downloads = idr::download::DownloadManager::GetInstance().GetDownloads();
-    
+
     // Ensure row count matches
-    while (m_downloadList->GetItemCount() < downloads.size()) {
+    while (m_downloadList->GetItemCount() < downloads.size())
+    {
         m_downloadList->InsertItem(m_downloadList->GetItemCount(), "");
     }
 
-    for (size_t i = 0; i < downloads.size(); ++i) {
-        auto& dl = downloads[i];
-        
+    for (size_t i = 0; i < downloads.size(); ++i)
+    {
+        auto &dl = downloads[i];
+
         uint64_t total = dl->GetTotalBytes();
         uint64_t dled = dl->GetDownloadedBytes();
         double speed = dl->GetSpeedBytesPerSec();
-        
+
         std::string progressStr = "0%";
-        if (total > 0) {
+        if (total > 0)
+        {
             double percent = (static_cast<double>(dled) / total) * 100.0;
             std::stringstream stream;
             stream << std::fixed << std::setprecision(1) << percent << "%";
@@ -130,12 +135,23 @@ void MainWindow::RefreshList()
         }
 
         std::string statusStr = "Unknown";
-        switch (dl->GetStatus()) {
-            case idr::download::DownloadStatus::Queued: statusStr = "Queued"; break;
-            case idr::download::DownloadStatus::Downloading: statusStr = "Downloading"; break;
-            case idr::download::DownloadStatus::Paused: statusStr = "Paused"; break;
-            case idr::download::DownloadStatus::Completed: statusStr = "Completed"; break;
-            case idr::download::DownloadStatus::Error: statusStr = "Error"; break;
+        switch (dl->GetStatus())
+        {
+        case idr::download::DownloadStatus::Queued:
+            statusStr = "Queued";
+            break;
+        case idr::download::DownloadStatus::Downloading:
+            statusStr = "Downloading";
+            break;
+        case idr::download::DownloadStatus::Paused:
+            statusStr = "Paused";
+            break;
+        case idr::download::DownloadStatus::Completed:
+            statusStr = "Completed";
+            break;
+        case idr::download::DownloadStatus::Error:
+            statusStr = "Error";
+            break;
         }
 
         m_downloadList->SetItem(i, 0, dl->GetFilename());
@@ -146,23 +162,23 @@ void MainWindow::RefreshList()
     }
 }
 
-void MainWindow::OnTimer(wxTimerEvent& event)
+void MainWindow::OnTimer(wxTimerEvent &event)
 {
     RefreshList();
 }
 
-void MainWindow::OnExit(wxCommandEvent& event)
+void MainWindow::OnExit(wxCommandEvent &event)
 {
     Close(true);
 }
 
-void MainWindow::OnAbout(wxCommandEvent& event)
+void MainWindow::OnAbout(wxCommandEvent &event)
 {
     wxMessageBox("Internet Downloader - Built with wxWidgets and libcurl",
                  "About Internet Downloader", wxOK | wxICON_INFORMATION);
 }
 
-void MainWindow::OnAddDownload(wxCommandEvent& event)
+void MainWindow::OnAddDownload(wxCommandEvent &event)
 {
     wxTextEntryDialog dlg(this, "Enter URL:", "Add New Download", "https://speed.hetzner.de/100MB.bin");
     if (dlg.ShowModal() == wxID_OK)
@@ -172,12 +188,12 @@ void MainWindow::OnAddDownload(wxCommandEvent& event)
         {
             // Just drop it into the current directory for now
             wxString dest = url.AfterLast('/');
-            if (dest.IsEmpty()) dest = "download.dat";
-            
+            if (dest.IsEmpty())
+                dest = "download.dat";
+
             idr::download::DownloadManager::GetInstance().AddDownload(
-                url.ToStdString(), 
-                dest.ToStdString()
-            );
+                url.ToStdString(),
+                dest.ToStdString());
             RefreshList();
         }
     }

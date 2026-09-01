@@ -1,14 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 set(CMAKE_POLICY_VERSION_MINIMUM "3.5" CACHE STRING "" FORCE)
 
-# Auto-inject vcpkg toolchain if not provided by IDE presets
-if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake")
-        set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake"
-            CACHE STRING "Vcpkg toolchain file")
-    endif()
-endif()
-
 project(InternetDownloader VERSION 1.0.0 LANGUAGES CXX)
 
 # ── language standard ────────────────────────────────────────────
@@ -18,8 +10,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ── vcpkg packages ───────────────────────────────────────────────
-# Add vcpkg-installed headers so the IDE can locate them immediately 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/build/vcpkg_installed/x64-windows/include)
 
 find_package(CURL REQUIRED)
 find_package(OpenSSL              REQUIRED)
@@ -29,6 +19,7 @@ find_package(nlohmann_json CONFIG REQUIRED)
 find_package(fmt           CONFIG REQUIRED)
 find_package(spdlog        CONFIG REQUIRED)
 find_package(wxWidgets     CONFIG REQUIRED)
+find_package(SqliteOrm     CONFIG REQUIRED)
 
 # ── source files ─────────────────────────────────────────────────
 file(GLOB_RECURSE CORE_SRCS "src/*.cpp")
@@ -55,6 +46,7 @@ target_link_libraries(InternetDownloader PRIVATE
     spdlog::spdlog
     wx::core
     wx::base
+    sqlite_orm::sqlite_orm
 )
 
 # ── Windows-only ─────────────────────────────────────────────────
