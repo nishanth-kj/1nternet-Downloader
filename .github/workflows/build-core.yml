@@ -1,0 +1,42 @@
+name: Build & Release Core App
+
+on:
+  push:
+    branches: [main, master, "feat/**"]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build-windows:
+    name: Build Windows (x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: ${{ runner.workspace }}/vcpkg
+          vcpkgGitCommitId: 94a541197763a4f449a1b91478df48c0584a6256
+
+      - name: Configure CMake
+        run: |
+          cmake -S core -B core/build `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="${{ runner.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Build Application
+        run: |
+          cmake --build core/build --config Release --parallel
+
+      - name: Upload Windows Executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: InternetDownloader-Windows-x64
+          path: |
+            core/build/Release/InternetDownloader.exe
+            core/build/Release/*.dll

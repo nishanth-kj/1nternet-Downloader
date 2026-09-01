@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
-set(CMAKE_POLICY_VERSION_MINIMUM "3.5" CACHE STRING "" FORCE)
+
+# ── Auto-include vcpkg toolchain ──────────────────────────────────
+if(EXISTS "C:/vcpkg/scripts/buildsystems/vcpkg.cmake" AND NOT DEFINED _VCPKG_TOOLCHAIN)
+    include("C:/vcpkg/scripts/buildsystems/vcpkg.cmake")
+elseif(DEFINED ENV{VCPKG_ROOT} AND EXISTS "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" AND NOT DEFINED _VCPKG_TOOLCHAIN)
+    include("$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+endif()
 
 project(InternetDownloader VERSION 1.0.0 LANGUAGES CXX)
 
