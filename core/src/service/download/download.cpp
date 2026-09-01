@@ -1,4 +1,4 @@
-#include "../../include/download/download.h"
+#include "download/download.h"
 #include <curl/curl.h>
 #include <thread>
 #include <fstream>

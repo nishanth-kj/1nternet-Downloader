@@ -1,5 +1,5 @@
 #include "gui/main_window.h"
-#include "../../include/download/manager.h"
+#include "download/manager.h"
 #include <wx/textdlg.h>
 #include <wx/msgdlg.h>
 #include <iomanip>
