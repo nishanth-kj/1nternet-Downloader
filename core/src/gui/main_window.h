@@ -22,6 +22,7 @@ private:
     void OnExit(wxCommandEvent& event);
     void OnAbout(wxCommandEvent& event);
     void OnAddDownload(wxCommandEvent& event);
+    void OnAddTorrent(wxCommandEvent& event);
     void OnPauseAll(wxCommandEvent& event);
     void OnResumeAll(wxCommandEvent& event);
     void OnClearCompleted(wxCommandEvent& event);
@@ -41,6 +42,7 @@ private:
     void OnCtxCopyUrl(wxCommandEvent& event);
     void OnCtxRemove(wxCommandEvent& event);
     void OnCtxDeleteFile(wxCommandEvent& event);
+    void OnCtxViewSegments(wxCommandEvent& event);
 
     // UI Setup helpers
     void SetupMenuBar();
@@ -58,7 +60,7 @@ private:
     wxTimer m_progressTimer;
     std::unique_ptr<AppTrayIcon> m_trayIcon;
 
-    int m_selectedCategory{0}; // 0 = All, 1 = Active, 2 = Completed, 3 = Paused, 4 = Error
+    int m_selectedCategory{0};
     bool m_forceExit{false};
 
     wxDECLARE_EVENT_TABLE();
@@ -67,6 +69,7 @@ private:
 enum
 {
     ID_AddDownload = 100,
+    ID_AddTorrent,
     ID_PauseAll,
     ID_ResumeAll,
     ID_ClearCompleted,
@@ -84,5 +87,6 @@ enum
     ID_CtxOpenFolder,
     ID_CtxCopyUrl,
     ID_CtxRemove,
-    ID_CtxDeleteFile
+    ID_CtxDeleteFile,
+    ID_CtxViewSegments
 };

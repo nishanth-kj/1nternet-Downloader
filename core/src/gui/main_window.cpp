@@ -17,6 +17,7 @@ wxBEGIN_EVENT_TABLE(MainWindow, wxFrame)
     EVT_MENU(wxID_EXIT, MainWindow::OnExit)
     EVT_MENU(wxID_ABOUT, MainWindow::OnAbout)
     EVT_MENU(ID_AddDownload, MainWindow::OnAddDownload)
+    EVT_MENU(ID_AddTorrent, MainWindow::OnAddTorrent)
     EVT_MENU(ID_PauseAll, MainWindow::OnPauseAll)
     EVT_MENU(ID_ResumeAll, MainWindow::OnResumeAll)
     EVT_MENU(ID_ClearCompleted, MainWindow::OnClearCompleted)
@@ -24,6 +25,7 @@ wxBEGIN_EVENT_TABLE(MainWindow, wxFrame)
     EVT_MENU(ID_OpenDownloadFolder, MainWindow::OnOpenDownloadFolder)
 
     EVT_TOOL(ID_AddDownload, MainWindow::OnAddDownload)
+    EVT_TOOL(ID_AddTorrent, MainWindow::OnAddTorrent)
     EVT_TOOL(ID_PauseAll, MainWindow::OnPauseAll)
     EVT_TOOL(ID_ResumeAll, MainWindow::OnResumeAll)
     EVT_TOOL(ID_DeleteSelected, MainWindow::OnDeleteSelected)
@@ -42,15 +44,16 @@ wxBEGIN_EVENT_TABLE(MainWindow, wxFrame)
     EVT_MENU(ID_CtxCopyUrl, MainWindow::OnCtxCopyUrl)
     EVT_MENU(ID_CtxRemove, MainWindow::OnCtxRemove)
     EVT_MENU(ID_CtxDeleteFile, MainWindow::OnCtxDeleteFile)
+    EVT_MENU(ID_CtxViewSegments, MainWindow::OnCtxViewSegments)
 
     EVT_TIMER(ID_ProgressTimer, MainWindow::OnTimer)
 wxEND_EVENT_TABLE()
 
 MainWindow::MainWindow(const wxString& title)
-    : wxFrame(NULL, wxID_ANY, title, wxDefaultPosition, wxSize(1050, 650)),
+    : wxFrame(NULL, wxID_ANY, title, wxDefaultPosition, wxSize(1100, 680)),
       m_progressTimer(this, ID_ProgressTimer)
 {
-    SetMinSize(wxSize(750, 450));
+    SetMinSize(wxSize(800, 480));
 
     // Setup Window Icon
     wxIcon appIcon;
@@ -72,13 +75,16 @@ MainWindow::MainWindow(const wxString& title)
 
     m_splitter = new wxSplitterWindow(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSP_3D | wxSP_LIVE_UPDATE);
 
-    // Sidebar Categories
+    // Sidebar Categories (IDM Style)
     wxArrayString sidebarChoices;
     sidebarChoices.Add("All Downloads");
     sidebarChoices.Add("Active (Downloading)");
     sidebarChoices.Add("Completed");
-    sidebarChoices.Add("Paused");
-    sidebarChoices.Add("Error / Failed");
+    sidebarChoices.Add("Torrents & Magnets");
+    sidebarChoices.Add("Videos (.mp4, .mkv)");
+    sidebarChoices.Add("Compressed (.zip, .rar)");
+    sidebarChoices.Add("Programs (.exe, .msi)");
+    sidebarChoices.Add("Documents (.pdf, .doc)");
 
     m_sidebar = new wxListBox(m_splitter, ID_Sidebar, wxDefaultPosition, wxDefaultSize, sidebarChoices, 0);
     m_sidebar->SetSelection(0);
@@ -86,15 +92,15 @@ MainWindow::MainWindow(const wxString& title)
     // Download Table
     SetupListCtrl();
 
-    m_splitter->SplitVertically(m_sidebar, m_downloadList, 200);
-    m_splitter->SetMinimumPaneSize(140);
+    m_splitter->SplitVertically(m_sidebar, m_downloadList, 210);
+    m_splitter->SetMinimumPaneSize(160);
 
     mainSizer->Add(m_splitter, 1, wxEXPAND | wxALL, 0);
     SetSizer(mainSizer);
 
     SetupStatusBar();
 
-    // Initial Refresh & Start Timer (500ms for smooth speed/progress update)
+    // Initial Refresh & Start Timer
     RefreshList();
     m_progressTimer.Start(500);
 }
@@ -113,7 +119,8 @@ void MainWindow::SetupMenuBar()
 
     // File Menu
     wxMenu* menuFile = new wxMenu;
-    menuFile->Append(ID_AddDownload, "&Add New Download...\tCtrl+N", "Add a new URL to download");
+    menuFile->Append(ID_AddDownload, "&Add URL Download...\tCtrl+N", "Add a new URL to download");
+    menuFile->Append(ID_AddTorrent, "Add &Torrent / Magnet Link...\tCtrl+T", "Add a .torrent file or magnet link");
     menuFile->AppendSeparator();
     menuFile->Append(ID_PauseAll, "Pause &All\tCtrl+P", "Pause all active downloads");
     menuFile->Append(ID_ResumeAll, "&Resume All\tCtrl+R", "Resume all downloads");
@@ -140,12 +147,14 @@ void MainWindow::SetupToolbar()
     m_toolbar = CreateToolBar(wxTB_FLAT | wxTB_HORIZONTAL);
 
     wxBitmap bmpAdd = wxArtProvider::GetBitmap(wxART_PLUS, wxART_TOOLBAR, wxSize(20, 20));
+    wxBitmap bmpTorrent = wxArtProvider::GetBitmap(wxART_FILE_OPEN, wxART_TOOLBAR, wxSize(20, 20));
     wxBitmap bmpPause = wxArtProvider::GetBitmap(wxART_MINUS, wxART_TOOLBAR, wxSize(20, 20));
     wxBitmap bmpResume = wxArtProvider::GetBitmap(wxART_GO_FORWARD, wxART_TOOLBAR, wxSize(20, 20));
     wxBitmap bmpDelete = wxArtProvider::GetBitmap(wxART_DELETE, wxART_TOOLBAR, wxSize(20, 20));
     wxBitmap bmpFolder = wxArtProvider::GetBitmap(wxART_FOLDER_OPEN, wxART_TOOLBAR, wxSize(20, 20));
 
-    m_toolbar->AddTool(ID_AddDownload, "Add Download", bmpAdd, "Add a new download URL");
+    m_toolbar->AddTool(ID_AddDownload, "Add URL", bmpAdd, "Add a new URL to download");
+    m_toolbar->AddTool(ID_AddTorrent, "Add Torrent", bmpTorrent, "Add a .torrent file or Magnet URI");
     m_toolbar->AddSeparator();
     m_toolbar->AddTool(ID_ResumeAll, "Resume All", bmpResume, "Resume all paused downloads");
     m_toolbar->AddTool(ID_PauseAll, "Pause All", bmpPause, "Pause all active downloads");
@@ -161,18 +170,19 @@ void MainWindow::SetupListCtrl()
     m_downloadList = new wxListCtrl(m_splitter, ID_DownloadList, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
 
     m_downloadList->InsertColumn(0, "#", wxLIST_FORMAT_RIGHT, 45);
-    m_downloadList->InsertColumn(1, "Filename", wxLIST_FORMAT_LEFT, 260);
+    m_downloadList->InsertColumn(1, "Filename", wxLIST_FORMAT_LEFT, 240);
     m_downloadList->InsertColumn(2, "Size", wxLIST_FORMAT_RIGHT, 95);
-    m_downloadList->InsertColumn(3, "Progress", wxLIST_FORMAT_RIGHT, 110);
+    m_downloadList->InsertColumn(3, "Progress", wxLIST_FORMAT_RIGHT, 100);
     m_downloadList->InsertColumn(4, "Speed", wxLIST_FORMAT_RIGHT, 100);
-    m_downloadList->InsertColumn(5, "Status", wxLIST_FORMAT_LEFT, 110);
-    m_downloadList->InsertColumn(6, "URL", wxLIST_FORMAT_LEFT, 240);
+    m_downloadList->InsertColumn(5, "Threads / Peers", wxLIST_FORMAT_CENTER, 105);
+    m_downloadList->InsertColumn(6, "Status", wxLIST_FORMAT_LEFT, 105);
+    m_downloadList->InsertColumn(7, "URL / Source", wxLIST_FORMAT_LEFT, 220);
 }
 
 void MainWindow::SetupStatusBar()
 {
     CreateStatusBar(3);
-    int widths[] = {-1, 160, 160};
+    int widths[] = {-1, 180, 180};
     SetStatusWidths(3, widths);
     SetStatusText("Ready", 0);
     SetStatusText("Speed: 0 B/s", 1);
@@ -197,7 +207,6 @@ void MainWindow::RefreshList()
 {
     auto allDownloads = idr::download::DownloadManager::GetInstance().GetDownloads();
 
-    // Filter based on selected sidebar category
     std::vector<std::shared_ptr<idr::download::Download>> filtered;
     double totalSpeed = 0.0;
     int activeCount = 0;
@@ -209,20 +218,25 @@ void MainWindow::RefreshList()
             totalSpeed += dl->GetSpeedBytesPerSec();
         }
 
+        std::string fname = dl->GetFilename();
+        std::transform(fname.begin(), fname.end(), fname.begin(), ::tolower);
+
         bool match = false;
         switch (m_selectedCategory) {
             case 0: match = true; break; // All
             case 1: match = (st == idr::download::DownloadStatus::Downloading || st == idr::download::DownloadStatus::Queued); break;
             case 2: match = (st == idr::download::DownloadStatus::Completed); break;
-            case 3: match = (st == idr::download::DownloadStatus::Paused); break;
-            case 4: match = (st == idr::download::DownloadStatus::Error); break;
+            case 3: match = dl->IsTorrent(); break; // Torrents
+            case 4: match = (fname.rfind(".mp4") != std::string::npos || fname.rfind(".mkv") != std::string::npos || fname.rfind(".avi") != std::string::npos); break; // Video
+            case 5: match = (fname.rfind(".zip") != std::string::npos || fname.rfind(".rar") != std::string::npos || fname.rfind(".7z") != std::string::npos || fname.rfind(".tar") != std::string::npos); break; // Compressed
+            case 6: match = (fname.rfind(".exe") != std::string::npos || fname.rfind(".msi") != std::string::npos || fname.rfind(".iso") != std::string::npos); break; // Programs
+            case 7: match = (fname.rfind(".pdf") != std::string::npos || fname.rfind(".doc") != std::string::npos || fname.rfind(".txt") != std::string::npos); break; // Documents
         }
         if (match) {
             filtered.push_back(dl);
         }
     }
 
-    // Adjust list control items count
     while (m_downloadList->GetItemCount() > static_cast<int>(filtered.size())) {
         m_downloadList->DeleteItem(m_downloadList->GetItemCount() - 1);
     }
@@ -251,26 +265,29 @@ void MainWindow::RefreshList()
         std::string statusStr = "Unknown";
         switch (dl->GetStatus()) {
             case idr::download::DownloadStatus::Queued: statusStr = "Queued"; break;
-            case idr::download::DownloadStatus::Downloading: statusStr = "Downloading"; break;
+            case idr::download::DownloadStatus::Downloading: statusStr = dl->IsTorrent() ? "Downloading" : "Accelerating"; break;
             case idr::download::DownloadStatus::Paused: statusStr = "Paused"; break;
-            case idr::download::DownloadStatus::Completed: statusStr = "Completed"; break;
+            case idr::download::DownloadStatus::Completed: statusStr = dl->IsTorrent() ? "Seeding" : "Completed"; break;
             case idr::download::DownloadStatus::Error: statusStr = "Error"; break;
         }
+
+        std::string connInfo = dl->IsTorrent()
+            ? (std::to_string(dl->GetPeers()) + " peers")
+            : (std::to_string(dl->GetSegmentCount()) + " threads");
 
         m_downloadList->SetItem(static_cast<long>(i), 0, wxString::Format("%d", dl->GetId()));
         m_downloadList->SetItem(static_cast<long>(i), 1, wxString::FromUTF8(dl->GetFilename()));
         m_downloadList->SetItem(static_cast<long>(i), 2, total > 0 ? FormatBytes(total) : (dled > 0 ? FormatBytes(dled) : "-"));
         m_downloadList->SetItem(static_cast<long>(i), 3, progressStr);
         m_downloadList->SetItem(static_cast<long>(i), 4, (dl->GetStatus() == idr::download::DownloadStatus::Downloading && speed > 0) ? FormatBytes(static_cast<uint64_t>(speed)) + "/s" : "-");
-        m_downloadList->SetItem(static_cast<long>(i), 5, statusStr);
-        m_downloadList->SetItem(static_cast<long>(i), 6, wxString::FromUTF8(dl->GetUrl()));
+        m_downloadList->SetItem(static_cast<long>(i), 5, wxString::FromUTF8(connInfo));
+        m_downloadList->SetItem(static_cast<long>(i), 6, statusStr);
+        m_downloadList->SetItem(static_cast<long>(i), 7, wxString::FromUTF8(dl->GetUrl()));
 
-        // Store ID in item data
         m_downloadList->SetItemData(static_cast<long>(i), dl->GetId());
     }
 
-    // Update Status Bar
-    SetStatusText(activeCount > 0 ? wxString::Format("Downloading %d item%s...", activeCount, activeCount > 1 ? "s" : "") : "Ready", 0);
+    SetStatusText(activeCount > 0 ? wxString::Format("Downloading %d item%s (IDM Multi-Stream Accelerated)...", activeCount, activeCount > 1 ? "s" : "") : "Ready", 0);
     SetStatusText(wxString::Format("Speed: %s/s", FormatBytes(static_cast<uint64_t>(totalSpeed))), 1);
     SetStatusText(wxString::Format("Active: %d | Total: %d", activeCount, static_cast<int>(allDownloads.size())), 2);
 }
@@ -290,7 +307,7 @@ void MainWindow::OnClose(wxCloseEvent& event)
         event.Veto();
         Hide();
         if (m_trayIcon) {
-            m_trayIcon->ShowNotification("Internet Downloader", "App minimized to system tray. Downloads continue in background.");
+            m_trayIcon->ShowNotification("Internet Downloader", "App minimized to system tray. Multi-threaded downloads continue in background.");
         }
     } else {
         Destroy();
@@ -310,7 +327,7 @@ void MainWindow::OnExit(wxCommandEvent& WXUNUSED(event))
 
 void MainWindow::OnAbout(wxCommandEvent& WXUNUSED(event))
 {
-    wxMessageBox("Internet Downloader v1.0.0\n\nHigh-Performance Modular Download Manager\nBuilt with modern C++, wxWidgets, libcurl & sqlite-orm",
+    wxMessageBox("Internet Downloader v1.0.0\n\nHigh-Performance Accelerated Download Manager\nSupports Multi-Segment HTTP/HTTPS & BitTorrent / Magnet links.\nBuilt with C++, wxWidgets, libcurl & sqlite-orm.",
                  "About Internet Downloader", wxOK | wxICON_INFORMATION, this);
 }
 
@@ -318,35 +335,33 @@ void MainWindow::OnAddDownload(wxCommandEvent& WXUNUSED(event))
 {
     wxString defaultUrl = "https://speed.hetzner.de/100MB.bin";
 
-    // Auto-detect URL from clipboard
     if (wxTheClipboard->Open()) {
         if (wxTheClipboard->IsSupported(wxDF_TEXT)) {
             wxTextDataObject data;
             wxTheClipboard->GetData(data);
             wxString clipText = data.GetText().Trim().Trim(false);
-            if (clipText.StartsWith("http://") || clipText.StartsWith("https://") || clipText.StartsWith("ftp://")) {
+            if (clipText.StartsWith("http://") || clipText.StartsWith("https://") || clipText.StartsWith("ftp://") || clipText.StartsWith("magnet:?")) {
                 defaultUrl = clipText;
             }
         }
         wxTheClipboard->Close();
     }
 
-    wxTextEntryDialog urlDlg(this, "Enter Download URL:", "Add New Download", defaultUrl);
+    wxTextEntryDialog urlDlg(this, "Enter Download URL or Magnet Link:", "Add New Accelerated Download", defaultUrl);
     if (urlDlg.ShowModal() != wxID_OK) return;
 
     wxString url = urlDlg.GetValue().Trim().Trim(false);
     if (url.IsEmpty()) return;
 
-    // Suggest destination filename
     wxString suggestedName = url.AfterLast('/');
     if (suggestedName.Find('?') != wxNOT_FOUND) {
         suggestedName = suggestedName.BeforeFirst('?');
     }
-    if (suggestedName.IsEmpty()) {
-        suggestedName = "download.dat";
+    if (suggestedName.IsEmpty() || url.StartsWith("magnet:?")) {
+        suggestedName = url.StartsWith("magnet:?") ? "torrent_download.dat" : "download.dat";
     }
 
-    wxFileDialog saveDlg(this, "Save Downloaded File As", "", suggestedName,
+    wxFileDialog saveDlg(this, "Save File As", "", suggestedName,
                          "All Files (*.*)|*.*", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
     if (saveDlg.ShowModal() != wxID_OK) return;
 
@@ -356,7 +371,25 @@ void MainWindow::OnAddDownload(wxCommandEvent& WXUNUSED(event))
     RefreshList();
 
     if (m_trayIcon) {
-        m_trayIcon->ShowNotification("Download Started", wxString::Format("Started downloading %s", suggestedName));
+        m_trayIcon->ShowNotification("Download Started", wxString::Format("Accelerating download of %s", suggestedName));
+    }
+}
+
+void MainWindow::OnAddTorrent(wxCommandEvent& WXUNUSED(event))
+{
+    wxFileDialog openDlg(this, "Select .torrent File", "", "",
+                         "Torrent Files (*.torrent)|*.torrent|All Files (*.*)|*.*", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+
+    if (openDlg.ShowModal() == wxID_OK) {
+        wxString torrentPath = openDlg.GetPath();
+        wxString defaultDest = openDlg.GetFilename().BeforeLast('.') + ".download";
+
+        wxFileDialog saveDlg(this, "Save Torrent Payload To", "", defaultDest,
+                             "All Files (*.*)|*.*", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+        if (saveDlg.ShowModal() == wxID_OK) {
+            idr::download::DownloadManager::GetInstance().AddDownload(torrentPath.ToStdString(), saveDlg.GetPath().ToStdString(), true);
+            RefreshList();
+        }
     }
 }
 
@@ -409,7 +442,6 @@ void MainWindow::OnOpenDownloadFolder(wxCommandEvent& WXUNUSED(event))
             }
         }
     }
-    // Default fallback to current directory
     wxLaunchDefaultApplication(wxGetCwd());
 }
 
@@ -443,6 +475,7 @@ void MainWindow::OnListRightClick(wxListEvent& event)
         menu.Append(ID_CtxResume, "&Resume");
     }
     menu.Append(ID_CtxRestart, "Re&start");
+    menu.Append(ID_CtxViewSegments, "View &Connections (IDM Segments)...");
     menu.AppendSeparator();
 
     if (status == idr::download::DownloadStatus::Completed) {
@@ -559,6 +592,36 @@ void MainWindow::OnCtxDeleteFile(wxCommandEvent& WXUNUSED(event))
         if (res == wxYES) {
             idr::download::DownloadManager::GetInstance().RemoveDownload(id, true);
             RefreshList();
+        }
+    }
+}
+
+void MainWindow::OnCtxViewSegments(wxCommandEvent& WXUNUSED(event))
+{
+    int id = GetSelectedDownloadId();
+    if (id <= 0) return;
+
+    auto downloads = idr::download::DownloadManager::GetInstance().GetDownloads();
+    for (auto& dl : downloads) {
+        if (dl->GetId() == id) {
+            auto segs = dl->GetSegments();
+            wxString msg = wxString::Format("File: %s\nConnections: %d parallel threads\nSpeed: %s/s\n\n",
+                                            dl->GetFilename(),
+                                            dl->GetSegmentCount(),
+                                            FormatBytes(static_cast<uint64_t>(dl->GetSpeedBytesPerSec())));
+
+            if (segs.empty()) {
+                msg += "Single-stream mode active (Server does not support Range chunks).";
+            } else {
+                for (size_t s = 0; s < segs.size(); ++s) {
+                    msg += wxString::Format("• Thread #%zu: Range %llu - %llu (%s)\n",
+                                            s + 1, segs[s].startOffset, segs[s].endOffset,
+                                            segs[s].isCompleted ? "Done" : "Downloading");
+                }
+            }
+
+            wxMessageBox(msg, "IDM Segment & Connection Details", wxOK | wxICON_INFORMATION, this);
+            break;
         }
     }
 }
