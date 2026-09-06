@@ -96,7 +96,7 @@ Register the protocol handler once per machine (no admin needed, writes HKCU onl
 # one-time: cross-compile curl for the arm64-v8a/API-24 overlay triplet
 vcpkg install curl:arm64-android --classic --overlay-triplets=android/vcpkg-triplets
 cd android
-gradle assembleDebug   # or assembleRelease
+./gradlew assembleDebug   # or assembleRelease
 ```
 `android/local.properties` (`sdk.dir=...`, forward slashes) and `android/gradle.properties` (`android.useAndroidX=true`) are both required and gitignored/local — recreate them if missing on a fresh machine.
 
