@@ -59,11 +59,15 @@ HttpResponse HttpClient::Head(const HttpRequest& req) {
     CURLcode res = curl_easy_perform(handle.Get());
     if (res != CURLE_OK) {
         resp.errorMessage = curl_easy_strerror(res);
+        FinishCommon(handle.Get(), resp);
         return resp;
     }
 
     FinishCommon(handle.Get(), resp);
-    resp.ok = true;
+    resp.ok = (resp.statusCode >= 200 && resp.statusCode < 400);
+    if (!resp.ok && resp.errorMessage.empty()) {
+        resp.errorMessage = "HTTP error " + std::to_string(resp.statusCode);
+    }
     return resp;
 }
 
@@ -90,7 +94,10 @@ HttpResponse HttpClient::Get(const HttpRequest& req, const DataCallback& onData)
     }
 
     FinishCommon(handle.Get(), resp);
-    resp.ok = true;
+    resp.ok = (resp.statusCode >= 200 && resp.statusCode < 400);
+    if (!resp.ok && resp.errorMessage.empty()) {
+        resp.errorMessage = "HTTP error " + std::to_string(resp.statusCode);
+    }
     return resp;
 }
 

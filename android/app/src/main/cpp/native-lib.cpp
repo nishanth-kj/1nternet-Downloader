@@ -98,22 +98,25 @@ bool DownloadRange(const std::string& url, const std::string& partPath, int64_t 
     CURL* curl = curl_easy_init();
     if (!curl) return false;
 
-    std::string range = end >= 0 ? (std::to_string(start) + "-" + std::to_string(end))
-                                  : (std::to_string(start) + "-");
-
     RangeWriteContext ctx{&out, &downloadedCounter, &stopRequested};
 
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_RANGE, range.c_str());
+    if (!(start == 0 && end < 0)) {
+        std::string range = end >= 0 ? (std::to_string(start) + "-" + std::to_string(end))
+                                      : (std::to_string(start) + "-");
+        curl_easy_setopt(curl, CURLOPT_RANGE, range.c_str());
+    }
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, kUserAgent);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, RangeWriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &ctx);
 
     CURLcode res = curl_easy_perform(curl);
+    long httpCode = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
     curl_easy_cleanup(curl);
 
-    return res == CURLE_OK;
+    return (res == CURLE_OK && httpCode >= 200 && httpCode < 400);
 }
 
 } // namespace net
