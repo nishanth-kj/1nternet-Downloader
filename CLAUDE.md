@@ -98,7 +98,7 @@ vcpkg install curl:arm64-android --classic --overlay-triplets=android/vcpkg-trip
 cd android
 ./gradlew assembleDebug   # or assembleRelease
 ```
-`android/local.properties` (`sdk.dir=...`, forward slashes) and `android/gradle.properties` (`android.useAndroidX=true`) are both required and gitignored/local — recreate them if missing on a fresh machine.
+`android/local.properties` (`sdk.dir=...`, forward slashes) is required and gitignored/local — recreate it if missing on a fresh machine. `android/gradle.properties` is tracked in git and should be edited via PRs when project-wide Gradle settings change.
 
 **site/:**
 ```bash
