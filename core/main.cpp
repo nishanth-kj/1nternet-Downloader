@@ -14,6 +14,7 @@
 
 #include <wx/wx.h>
 #include <wx/cmdline.h>
+#include <wx/weakref.h>
 #include "gui/main_window.h"
 #include "utils/system/ipc.h"
 #include "utils/string_utils.h"
@@ -68,9 +69,17 @@ public:
             frame->AddDownloadFromExternal(forwardedUrl);
         }
 
-        idr::system::SingleInstanceGuard::StartServer([frame](std::string url)
-                                                      { frame->CallAfter([frame, url]()
-                                                                         { frame->AddDownloadFromExternal(wxString(url)); }); });
+        wxWeakRef<MainWindow> weakFrame(frame);
+        idr::system::SingleInstanceGuard::StartServer([weakFrame](std::string url)
+                                                      {
+                                                          if (!weakFrame)
+                                                              return;
+                                                          weakFrame->CallAfter([weakFrame, url]()
+                                                                               {
+                                                                                   if (weakFrame)
+                                                                                       weakFrame->AddDownloadFromExternal(wxString(url));
+                                                                               });
+                                                      });
 
         return true;
     }
