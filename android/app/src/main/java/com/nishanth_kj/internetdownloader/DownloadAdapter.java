@@ -96,3 +96,4 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
         }
     }
 }
+
