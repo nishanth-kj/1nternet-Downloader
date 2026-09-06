@@ -135,7 +135,8 @@ void Download::StartTorrentDownload() {
 
             auto snap = m_torrentTask->GetSnapshot();
 
-            if (!snap.name.empty()) m_filename = snap.name;
+            // Avoid mutating m_filename here: it's read from the UI thread and is not synchronized.
+            // (If live renaming is needed, guard m_filename with a mutex shared by GetFilename().)
             m_totalBytes = snap.totalBytes;
             m_downloadedBytes = snap.downloadedBytes;
             m_speed = snap.downloadSpeed;
