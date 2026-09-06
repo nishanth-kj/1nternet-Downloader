@@ -18,9 +18,11 @@ namespace {
 
 // Streams a data callback's chunks into an already-open ofstream, matching the
 // idr::network::DataCallback contract.
-idr::network::DataCallback MakeFileWriter(std::ofstream& out) {
-    return [&out](const char* data, size_t len) -> size_t {
+idr::network::DataCallback MakeFileWriter(
+    std::ofstream& out, const std::function<void(size_t)>& onChunk = {}) {
+    return [&out, onChunk](const char* data, size_t len) -> size_t {
         if (!out.write(data, static_cast<std::streamsize>(len))) return 0;
+        if (onChunk) onChunk(len);
         return len;
     };
 }
@@ -270,9 +272,19 @@ void Download::StartSingleDownload() {
         if (std::filesystem::exists(m_destination)) {
             existingSize = std::filesystem::file_size(m_destination);
         }
-        m_downloadedBytes = existingSize;
 
-        std::ofstream outFile(m_destination, std::ios::binary | (existingSize > 0 ? std::ios::app : std::ios::trunc));
+        bool canResume = false;
+        if (existingSize > 0) {
+            idr::network::HttpRequest headReq;
+            headReq.url = m_url;
+            auto headResp = idr::network::HttpClient::Head(headReq);
+            canResume = headResp.ok && headResp.acceptRangesBytes;
+            if (!canResume) existingSize = 0;
+        }
+
+        m_downloadedBytes = existingSize;
+        const std::string streamPath = canResume ? m_destination + ".resume" : m_destination;
+        std::ofstream outFile(streamPath, std::ios::binary | std::ios::trunc);
         if (!outFile.is_open()) {
             m_status = DownloadStatus::Error;
             NotifyStatusChanged();
@@ -281,15 +293,42 @@ void Download::StartSingleDownload() {
 
         idr::network::HttpRequest req;
         req.url = m_url;
-        if (existingSize > 0) {
+        if (canResume) {
             req.rangeStart = static_cast<int64_t>(existingSize);
         }
 
-        auto writer = MakeFileWriter(outFile);
+        const auto startedAt = std::chrono::steady_clock::now();
+        uint64_t streamedBytes = 0;
+        auto writer = MakeFileWriter(outFile, [this, &streamedBytes, existingSize, startedAt](size_t len) {
+            streamedBytes += len;
+            m_downloadedBytes = existingSize + streamedBytes;
+            const auto elapsed = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - startedAt).count();
+            if (elapsed > 0.0) m_speed = static_cast<double>(streamedBytes) / elapsed;
+        });
         auto resp = idr::network::HttpClient::Get(req, writer);
         outFile.close();
 
-        if (resp.ok && !m_stopRequested) {
+        bool completed = resp.ok;
+        if (canResume && resp.ok) {
+            if (resp.statusCode == 206) {
+                std::ofstream destination(m_destination, std::ios::binary | std::ios::app);
+                std::ifstream resume(streamPath, std::ios::binary);
+                destination << resume.rdbuf();
+                completed = destination.good();
+            } else if (resp.statusCode == 200) {
+                std::error_code ec;
+                std::filesystem::remove(m_destination, ec);
+                std::filesystem::rename(streamPath, m_destination, ec);
+                completed = !ec;
+                if (completed) m_downloadedBytes = streamedBytes;
+            } else {
+                completed = false;
+            }
+        }
+        if (canResume) std::filesystem::remove(streamPath);
+
+        if (completed && !m_stopRequested) {
             m_status = DownloadStatus::Completed;
             m_speed = 0.0;
         } else if (!m_stopRequested) {
