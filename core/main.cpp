@@ -68,11 +68,9 @@ public:
             frame->AddDownloadFromExternal(forwardedUrl);
         }
 
-        idr::system::SingleInstanceGuard::StartServer([frame](std::string url) {
-            frame->CallAfter([frame, url]() {
-                frame->AddDownloadFromExternal(wxString(url));
-            });
-        });
+        idr::system::SingleInstanceGuard::StartServer([frame](std::string url)
+                                                      { frame->CallAfter([frame, url]()
+                                                                         { frame->AddDownloadFromExternal(wxString(url)); }); });
 
         return true;
     }
