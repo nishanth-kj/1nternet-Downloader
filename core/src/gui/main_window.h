@@ -16,6 +16,11 @@ public:
     void ForceExit();
     void RefreshList();
 
+    // Adds a download handed off from outside the app (the idr:// protocol handler,
+    // fed either by our own command line or by another instance forwarding it over
+    // the single-instance IPC pipe) without prompting the user for a save path.
+    void AddDownloadFromExternal(const wxString& url);
+
 private:
     // Event handlers
     void OnClose(wxCloseEvent& event);

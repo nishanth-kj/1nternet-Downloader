@@ -15,11 +15,14 @@ wxBEGIN_EVENT_TABLE(AppTrayIcon, wxTaskBarIcon)
                                 AppTrayIcon::AppTrayIcon(MainWindow *mainWindow)
     : m_mainWindow(mainWindow)
 {
-    wxIcon icon;
-    wxBitmap bmp = wxArtProvider::GetBitmap(wxART_HARDDISK, wxART_OTHER, wxSize(16, 16));
-    if (bmp.IsOk())
+    wxIcon icon(wxICON(IDI_ICON1));
+    if (!icon.IsOk())
     {
-        icon.CopyFromBitmap(bmp);
+        wxBitmap bmp = wxArtProvider::GetBitmap(wxART_HARDDISK, wxART_OTHER, wxSize(16, 16));
+        if (bmp.IsOk()) icon.CopyFromBitmap(bmp);
+    }
+    if (icon.IsOk())
+    {
         SetIcon(icon, "Internet Downloader");
     }
 }

@@ -14,6 +14,10 @@
     "nlohmann-json",
     "fmt",
     "spdlog",
-    "sqlite-orm"
+    "sqlite-orm",
+    {
+      "name": "libtorrent",
+      "default-features": false
+    }
   ]
 }

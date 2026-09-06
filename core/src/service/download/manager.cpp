@@ -1,7 +1,8 @@
 #include "service/download/manager.h"
 #include <algorithm>
-#include <filesystem>
 #include <chrono>
+#include <curl/curl.h>
+#include <filesystem>
 
 namespace idr {
 namespace download {
@@ -88,6 +89,7 @@ bool DownloadManager::RemoveDownload(int id, bool deleteFile) {
     if (it != m_downloads.end()) {
         auto dl = *it;
         dl->Stop();
+        dl->ReleaseTorrentResources();
 
         if (deleteFile) {
             std::error_code ec;

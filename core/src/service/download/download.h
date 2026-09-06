@@ -5,10 +5,13 @@
 #include <atomic>
 #include <chrono>
 #include <functional>
+#include <memory>
 #include <mutex>
-#include <curl/curl.h>
 
 namespace idr {
+namespace torrent {
+class TorrentTask;
+}
 namespace download {
 
 enum class DownloadStatus {
@@ -87,10 +90,17 @@ private:
     std::vector<DownloadSegment> m_segments;
     std::mutex m_segmentMutex;
 
+    std::shared_ptr<idr::torrent::TorrentTask> m_torrentTask;
+
     void NotifyStatusChanged();
     void StartMultiSegmentDownload(uint64_t totalSize, int numSegments);
     void StartSingleDownload();
     void StartTorrentDownload();
+
+public:
+    // Releases the underlying libtorrent resources (if any). Called by DownloadManager
+    // before deleting the download's files, so libtorrent isn't still writing to them.
+    void ReleaseTorrentResources();
 };
 
 } // namespace download
