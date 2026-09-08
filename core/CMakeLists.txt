@@ -25,14 +25,21 @@ find_package(fmt           CONFIG REQUIRED)
 find_package(spdlog        CONFIG REQUIRED)
 find_package(wxWidgets     CONFIG REQUIRED)
 find_package(SqliteOrm     CONFIG REQUIRED)
+find_package(LibtorrentRasterbar CONFIG REQUIRED)
 
 # ── source files ─────────────────────────────────────────────────
 file(GLOB_RECURSE CORE_SRCS "src/*.cpp")
 
 # ── executable ───────────────────────────────────────────────────
+set(APP_RC "")
+if(WIN32)
+    set(APP_RC app.rc)
+endif()
+
 add_executable(InternetDownloader WIN32
     main.cpp
     ${CORE_SRCS}
+    ${APP_RC}
 )
 
 target_include_directories(InternetDownloader PRIVATE
@@ -54,6 +61,7 @@ target_link_libraries(InternetDownloader PRIVATE
     wx::core
     wx::base
     sqlite_orm::sqlite_orm
+    LibtorrentRasterbar::torrent-rasterbar
 )
 
 # ── Windows-only ─────────────────────────────────────────────────

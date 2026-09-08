@@ -31,13 +31,11 @@
 *.out
 *.app
 
-# CMake build directories
+# CMake / build output
 build/
 build-*/
 out/
 CMakeUserPresets.json
-
-
 
 # IDE directories — .vscode/ is intentionally tracked (project config)
 .idea/
@@ -52,15 +50,16 @@ vcpkg/
 !vcpkg.json          # manifest IS tracked
 !CMakePresets.json   # presets ARE tracked
 
-# Build output
-build/
-build-*/
-out/
-
 .env
 !.env.example
-.vscode
 
 # Android
 *.apk
 .gradle/
+.cxx/
+local.properties
+
+# Agent
+agent/
+.agent/Agent.md
+.agent/CLAUDE.md

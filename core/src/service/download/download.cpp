@@ -1,37 +1,33 @@
 #include "service/download/download.h"
+#include "service/network/http.h"
+#include "service/network/request.h"
+#include "service/network/response.h"
+#include "service/torrent/manager.h"
 #include "service/torrent/metainfo.h"
-#include <curl/curl.h>
-#include <thread>
-#include <fstream>
-#include <iostream>
-#include <filesystem>
+
 #include <algorithm>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <thread>
 
 namespace idr {
 namespace download {
 
-struct SegmentWorkerContext {
-    Download* parent{nullptr};
-    int segmentIndex{0};
-    uint64_t startByte{0};
-    uint64_t endByte{0};
-    std::string destination;
-    std::string url;
-};
+namespace {
 
-static size_t SegmentWriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
-    auto* ctx = static_cast<SegmentWorkerContext*>(userp);
-    if (!ctx || !ctx->parent) return 0;
-
-    size_t totalBytes = size * nmemb;
-    std::string partPath = ctx->destination + ".part" + std::to_string(ctx->segmentIndex);
-
-    std::ofstream outfile(partPath, std::ios::binary | std::ios::app);
-    if (outfile.is_open() && outfile.write(static_cast<char*>(contents), totalBytes)) {
-        return totalBytes;
-    }
-    return 0;
+// Streams a data callback's chunks into an already-open ofstream, matching the
+// idr::network::DataCallback contract.
+idr::network::DataCallback MakeFileWriter(
+    std::ofstream& out, const std::function<void(size_t)>& onChunk = {}) {
+    return [&out, onChunk](const char* data, size_t len) -> size_t {
+        if (!out.write(data, static_cast<std::streamsize>(len))) return 0;
+        if (onChunk) onChunk(len);
+        return len;
+    };
 }
+
+} // namespace
 
 Download::Download(const std::string& url, const std::string& destination, int dbId)
     : m_id(dbId), m_url(url), m_destination(destination)
@@ -88,72 +84,80 @@ void Download::Start() {
 
     if (m_isTorrent) {
         StartTorrentDownload();
-    } else {
-        // Probe server headers (Accept-Ranges and Content-Length)
-        std::thread([this]() {
-            CURL* curl = curl_easy_init();
-            if (!curl) {
-                StartSingleDownload();
-                return;
-            }
-
-            curl_easy_setopt(curl, CURLOPT_URL, m_url.c_str());
-            curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
-            curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-            curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) InternetDownloader/1.0");
-
-            CURLcode res = curl_easy_perform(curl);
-            curl_off_t cl = 0;
-            curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl);
-
-            long httpCode = 0;
-            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
-            curl_easy_cleanup(curl);
-
-            if (res == CURLE_OK && cl > 2 * 1024 * 1024) {
-                // Multi-segment acceleration (IDM style 4-8 parallel connections)
-                int numSegments = (cl > 50 * 1024 * 1024) ? 8 : 4;
-                StartMultiSegmentDownload(static_cast<uint64_t>(cl), numSegments);
-            } else {
-                StartSingleDownload();
-            }
-        }).detach();
+        return;
     }
+
+    // Probe server headers (Accept-Ranges and Content-Length) to decide whether we
+    // can accelerate this download with parallel byte-range connections.
+    std::thread([this]() {
+        idr::network::HttpRequest headReq;
+        headReq.url = m_url;
+
+        auto headResp = idr::network::HttpClient::Head(headReq);
+
+        if (headResp.ok && headResp.contentLength > 0) {
+            m_totalBytes = static_cast<uint64_t>(headResp.contentLength);
+        }
+
+        if (headResp.ok && headResp.acceptRangesBytes && headResp.contentLength > 2 * 1024 * 1024) {
+            // Multi-segment acceleration via parallel byte-range connections.
+            int numSegments = (headResp.contentLength > 50 * 1024 * 1024) ? 8 : 4;
+            StartMultiSegmentDownload(static_cast<uint64_t>(headResp.contentLength), numSegments);
+        } else {
+            StartSingleDownload();
+        }
+    }).detach();
 }
 
 void Download::StartTorrentDownload() {
-    m_peers = 18;
-    m_seeds = 34;
+    if (!m_torrentTask) {
+        // The GUI's save dialog hands us a *file* path (matching the HTTP download
+        // convention), but libtorrent needs a *directory* to write into — it lays
+        // files out according to the torrent's own metadata.
+        std::filesystem::path destPath(m_destination);
+        std::string saveDir = destPath.has_parent_path() ? destPath.parent_path().string() : ".";
+        if (saveDir.empty()) saveDir = ".";
+
+        m_torrentTask = idr::torrent::TorrentManager::GetInstance().AddTorrent(m_url, saveDir, true);
+        if (!m_torrentTask) {
+            m_status = DownloadStatus::Error;
+            NotifyStatusChanged();
+            return;
+        }
+    } else {
+        m_torrentTask->Resume();
+    }
 
     std::thread([this]() {
-        uint64_t total = m_totalBytes > 0 ? m_totalBytes.load() : 120 * 1024 * 1024;
-        m_totalBytes = total;
+        while (!m_stopRequested) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            if (m_stopRequested || !m_torrentTask) break;
 
-        auto lastTime = std::chrono::steady_clock::now();
+            auto snap = m_torrentTask->GetSnapshot();
 
-        while (!m_stopRequested && m_downloadedBytes < total) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
-            if (m_stopRequested) break;
+            // Avoid mutating m_filename here: it's read from the UI thread and is not synchronized.
+            // (If live renaming is needed, guard m_filename with a mutex shared by GetFilename().)
+            m_totalBytes = snap.totalBytes;
+            m_downloadedBytes = snap.downloadedBytes;
+            m_speed = snap.downloadSpeed;
+            m_peers = snap.peers;
+            m_seeds = snap.seeds;
 
-            auto now = std::chrono::steady_clock::now();
-            double elapsed = std::chrono::duration<double>(now - lastTime).count();
-            lastTime = now;
-
-            // ~3.5 MB/s torrent download simulation
-            uint64_t chunk = static_cast<uint64_t>(3500000.0 * elapsed);
-            if (m_downloadedBytes + chunk > total) {
-                chunk = total - m_downloadedBytes;
+            using TS = idr::torrent::TorrentStatus;
+            if (snap.status == TS::Completed || snap.status == TS::Seeding) {
+                m_status = DownloadStatus::Completed;
+                m_speed = 0.0;
+                NotifyStatusChanged();
+                break;
+            }
+            if (snap.status == TS::Error) {
+                m_status = DownloadStatus::Error;
+                NotifyStatusChanged();
+                break;
             }
 
-            m_downloadedBytes += chunk;
-            m_speed = elapsed > 0 ? (chunk / elapsed) : 0.0;
+            NotifyStatusChanged();
         }
-
-        if (!m_stopRequested && m_downloadedBytes >= total) {
-            m_status = DownloadStatus::Completed;
-            m_speed = 0.0;
-        }
-        NotifyStatusChanged();
     }).detach();
 }
 
@@ -200,23 +204,19 @@ void Download::StartMultiSegmentDownload(uint64_t totalSize, int numSegments) {
                 return;
             }
 
-            CURL* curl = curl_easy_init();
-            if (!curl) return;
+            std::ofstream outFile(partPath, std::ios::binary | std::ios::app);
+            if (!outFile.is_open()) return;
 
-            std::string rangeHeader = std::to_string(segStart + existing) + "-" + std::to_string(segEnd);
-            SegmentWorkerContext ctx{this, i, segStart, segEnd, m_destination, m_url};
+            idr::network::HttpRequest req;
+            req.url = m_url;
+            req.rangeStart = static_cast<int64_t>(segStart + existing);
+            req.rangeEnd = static_cast<int64_t>(segEnd);
 
-            curl_easy_setopt(curl, CURLOPT_URL, m_url.c_str());
-            curl_easy_setopt(curl, CURLOPT_RANGE, rangeHeader.c_str());
-            curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, SegmentWriteCallback);
-            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &ctx);
-            curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) InternetDownloader/1.0");
+            auto writer = MakeFileWriter(outFile);
+            auto resp = idr::network::HttpClient::Get(req, writer);
+            outFile.close();
 
-            CURLcode res = curl_easy_perform(curl);
-            curl_easy_cleanup(curl);
-
-            if (res == CURLE_OK && !m_stopRequested) {
+            if (resp.ok && !m_stopRequested) {
                 std::lock_guard<std::mutex> lock(m_segmentMutex);
                 m_segments[i].isCompleted = true;
             }
@@ -269,41 +269,67 @@ void Download::StartSingleDownload() {
     m_segmentCount = 1;
 
     std::thread([this]() {
-        CURL* curl = curl_easy_init();
-        if (!curl) {
+        uint64_t existingSize = 0;
+        if (std::filesystem::exists(m_destination)) {
+            existingSize = std::filesystem::file_size(m_destination);
+        }
+
+        bool canResume = false;
+        if (existingSize > 0) {
+            idr::network::HttpRequest headReq;
+            headReq.url = m_url;
+            auto headResp = idr::network::HttpClient::Head(headReq);
+            canResume = headResp.ok && headResp.acceptRangesBytes;
+            if (!canResume) existingSize = 0;
+        }
+
+        m_downloadedBytes = existingSize;
+        const std::string streamPath = canResume ? m_destination + ".resume" : m_destination;
+        std::ofstream outFile(streamPath, std::ios::binary | std::ios::trunc);
+        if (!outFile.is_open()) {
             m_status = DownloadStatus::Error;
             NotifyStatusChanged();
             return;
         }
 
-        uint64_t existingSize = 0;
-        if (std::filesystem::exists(m_destination)) {
-            existingSize = std::filesystem::file_size(m_destination);
-        }
-        m_downloadedBytes = existingSize;
-
-        curl_easy_setopt(curl, CURLOPT_URL, m_url.c_str());
-        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-        curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) InternetDownloader/1.0");
-
-        if (existingSize > 0) {
-            curl_easy_setopt(curl, CURLOPT_RESUME_FROM_LARGE, static_cast<curl_off_t>(existingSize));
+        idr::network::HttpRequest req;
+        req.url = m_url;
+        if (canResume) {
+            req.rangeStart = static_cast<int64_t>(existingSize);
         }
 
-        SegmentWorkerContext ctx{this, 0, 0, 0, m_destination, m_url};
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, SegmentWriteCallback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &ctx);
+        const auto startedAt = std::chrono::steady_clock::now();
+        uint64_t streamedBytes = 0;
+        auto writer = MakeFileWriter(outFile, [this, &streamedBytes, existingSize, startedAt](size_t len) {
+            streamedBytes += len;
+            m_downloadedBytes = existingSize + streamedBytes;
+            const auto elapsed = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - startedAt).count();
+            if (elapsed > 0.0) m_speed = static_cast<double>(streamedBytes) / elapsed;
+        });
+        auto resp = idr::network::HttpClient::Get(req, writer);
+        outFile.close();
 
-        CURLcode res = curl_easy_perform(curl);
-        curl_easy_cleanup(curl);
-
-        if (res == CURLE_OK && !m_stopRequested) {
-            std::string partPath = m_destination + ".part0";
-            if (std::filesystem::exists(partPath)) {
+        bool completed = resp.ok;
+        if (canResume && resp.ok) {
+            if (resp.statusCode == 206) {
+                std::ofstream destination(m_destination, std::ios::binary | std::ios::app);
+                std::ifstream resume(streamPath, std::ios::binary);
+                destination << resume.rdbuf();
+                completed = destination.good();
+            } else if (resp.statusCode == 200) {
                 std::error_code ec;
-                std::filesystem::rename(partPath, m_destination, ec);
+                std::filesystem::remove(m_destination, ec);
+                std::filesystem::rename(streamPath, m_destination, ec);
+                completed = !ec;
+                if (completed) m_downloadedBytes = streamedBytes;
+            } else {
+                completed = false;
             }
+        }
+        if (canResume) std::filesystem::remove(streamPath);
+
+        if (completed && !m_stopRequested) {
             m_status = DownloadStatus::Completed;
             m_speed = 0.0;
         } else if (!m_stopRequested) {
@@ -317,6 +343,7 @@ void Download::Pause() {
     m_stopRequested = true;
     m_status = DownloadStatus::Paused;
     m_speed = 0.0;
+    if (m_torrentTask) m_torrentTask->Pause();
     NotifyStatusChanged();
 }
 
@@ -328,11 +355,19 @@ void Download::Resume() {
 
 void Download::Stop() {
     m_stopRequested = true;
+    if (m_torrentTask) m_torrentTask->Stop();
     if (m_status == DownloadStatus::Downloading) {
         m_status = DownloadStatus::Paused;
     }
     m_speed = 0.0;
     NotifyStatusChanged();
+}
+
+void Download::ReleaseTorrentResources() {
+    if (m_torrentTask) {
+        idr::torrent::TorrentManager::GetInstance().RemoveTorrent(m_torrentTask->GetId());
+        m_torrentTask.reset();
+    }
 }
 
 } // namespace download

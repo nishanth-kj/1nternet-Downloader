@@ -6,6 +6,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import android.content.ClipboardManager;
 import android.content.ClipData;
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -82,6 +84,42 @@ public class MainActivity extends AppCompatActivity implements DownloadAdapter.O
                 refreshDownloads();
             }
         });
+
+        handleIncomingIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleIncomingIntent(intent);
+    }
+
+    // Handles a magnet:/idr: link that launched or was forwarded to this activity
+    // (see the intent-filter in AndroidManifest.xml), starting a download without
+    // prompting the user for a save path.
+    private void handleIncomingIntent(Intent intent) {
+        if (intent == null) return;
+        Uri data = intent.getData();
+        if (data == null) return;
+
+        String url = data.toString();
+        String scheme = data.getScheme();
+        if (scheme != null && scheme.equalsIgnoreCase("idr")) {
+            String encoded = url.length() > 6 ? url.substring(6) : "";
+            try {
+                url = java.net.URLDecoder.decode(encoded, "UTF-8");
+            } catch (Exception e) {
+                url = encoded;
+            }
+        }
+        if (url.isEmpty()) return;
+
+        File destFolder = getExternalFilesDir(null);
+        String destPath = new File(destFolder, "download_" + System.currentTimeMillis()).getAbsolutePath();
+        nativeStartDownload(url, destPath, 4);
+        Toast.makeText(this, "Download added from link", Toast.LENGTH_SHORT).show();
+        refreshDownloads();
     }
 
     @Override

@@ -10,6 +10,7 @@
 #include <chrono>
 #include <filesystem>
 #include <algorithm>
+#include <curl/curl.h>
 #include <android/log.h>
 
 #define LOG_TAG "IDR_Native"
@@ -17,6 +18,108 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 namespace idr_android {
+
+namespace net {
+
+// Minimal real libcurl helpers used by NativeDownloadTask. This mirrors the
+// desktop engine's approach (HEAD probe -> parallel byte-range GETs -> reassemble)
+// but stays in one file since Android doesn't share the desktop's network/ layer.
+
+constexpr const char* kUserAgent = "Mozilla/5.0 (Linux; Android) InternetDownloader/1.0";
+
+struct ProbeResult {
+    bool ok{false};
+    int64_t contentLength{-1};
+    bool acceptRanges{false};
+};
+
+size_t DiscardWriteCallback(char*, size_t size, size_t nmemb, void*) {
+    return size * nmemb; // HEAD probe: ignore body
+}
+
+size_t HeaderCallback(char* buffer, size_t size, size_t nitems, void* userdata) {
+    auto* out = static_cast<ProbeResult*>(userdata);
+    size_t total = size * nitems;
+    std::string line(buffer, total);
+    if (line.find("Accept-Ranges") != std::string::npos && line.find("bytes") != std::string::npos) {
+        out->acceptRanges = true;
+    }
+    return total;
+}
+
+ProbeResult Probe(const std::string& url) {
+    ProbeResult result;
+    CURL* curl = curl_easy_init();
+    if (!curl) return result;
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, kUserAgent);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, HeaderCallback);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &result);
+
+    CURLcode res = curl_easy_perform(curl);
+    if (res == CURLE_OK) {
+        curl_off_t cl = -1;
+        curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl);
+        result.contentLength = static_cast<int64_t>(cl);
+        result.ok = true;
+    }
+
+    curl_easy_cleanup(curl);
+    return result;
+}
+
+struct RangeWriteContext {
+    std::ofstream* out{nullptr};
+    std::atomic<uint64_t>* downloadedCounter{nullptr};
+    std::atomic<bool>* stopRequested{nullptr};
+};
+
+size_t RangeWriteCallback(char* contents, size_t size, size_t nmemb, void* userp) {
+    auto* ctx = static_cast<RangeWriteContext*>(userp);
+    if (!ctx || !ctx->out) return 0;
+    if (ctx->stopRequested && ctx->stopRequested->load()) return 0; // aborts the transfer
+
+    size_t total = size * nmemb;
+    if (!ctx->out->write(contents, static_cast<std::streamsize>(total))) return 0;
+    if (ctx->downloadedCounter) *ctx->downloadedCounter += total;
+    return total;
+}
+
+// Downloads [start, end] (inclusive; end < 0 means "to end of file") into partPath.
+// Returns true on success.
+bool DownloadRange(const std::string& url, const std::string& partPath, int64_t start, int64_t end,
+                    std::atomic<uint64_t>& downloadedCounter, std::atomic<bool>& stopRequested) {
+    std::ofstream out(partPath, std::ios::binary | std::ios::app);
+    if (!out.is_open()) return false;
+
+    CURL* curl = curl_easy_init();
+    if (!curl) return false;
+
+    RangeWriteContext ctx{&out, &downloadedCounter, &stopRequested};
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    if (!(start == 0 && end < 0)) {
+        std::string range = end >= 0 ? (std::to_string(start) + "-" + std::to_string(end))
+                                      : (std::to_string(start) + "-");
+        curl_easy_setopt(curl, CURLOPT_RANGE, range.c_str());
+    }
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, kUserAgent);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, RangeWriteCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &ctx);
+
+    CURLcode res = curl_easy_perform(curl);
+    long httpCode = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+    curl_easy_cleanup(curl);
+
+    return (res == CURLE_OK && httpCode >= 200 && httpCode < 400);
+}
+
+} // namespace net
 
 enum class Status {
     Queued = 0,
@@ -61,6 +164,7 @@ struct NativeDownloadTask {
 
     ~NativeDownloadTask() {
         Stop();
+        if (workerThread.joinable()) workerThread.join();
     }
 
     void Start() {
@@ -69,7 +173,7 @@ struct NativeDownloadTask {
         stopRequested = false;
 
         if (workerThread.joinable()) {
-            workerThread.detach();
+            workerThread.join();
         }
 
         workerThread = std::thread(&NativeDownloadTask::ExecuteDownload, this);
@@ -98,35 +202,90 @@ struct NativeDownloadTask {
     void ExecuteDownload() {
         LOGI("Starting native download task #%d: %s (Threads: %d)", id, url.c_str(), numThreads.load());
 
-        // Default test size if unknown: 100 MB
-        uint64_t targetTotal = totalBytes.load() > 0 ? totalBytes.load() : 100 * 1024 * 1024;
-        totalBytes = targetTotal;
-
-        auto lastTime = std::chrono::steady_clock::now();
-
-        // Multi-threaded high-speed download execution loop
-        while (!stopRequested && downloadedBytes < targetTotal) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(150));
-            if (stopRequested) break;
-
-            auto now = std::chrono::steady_clock::now();
-            double elapsed = std::chrono::duration<double>(now - lastTime).count();
-            lastTime = now;
-
-            // IDM multi-connection chunk acceleration: ~4.5 MB/s
-            uint64_t chunk = static_cast<uint64_t>(4500000.0 * elapsed);
-            if (downloadedBytes + chunk > targetTotal) {
-                chunk = targetTotal - downloadedBytes;
-            }
-
-            downloadedBytes += chunk;
-            speed = elapsed > 0 ? (chunk / elapsed) : 0.0;
+        if (isTorrent) {
+            // BitTorrent is not yet implemented in the Android build (it would require
+            // cross-compiling libtorrent + boost for Android, which the desktop build
+            // uses but this native module does not yet link). Report an error instead
+            // of faking progress.
+            LOGE("Torrent/magnet downloads are not yet supported on Android: %s", url.c_str());
+            status = Status::Error;
+            return;
         }
 
-        if (!stopRequested && downloadedBytes >= targetTotal) {
+        auto probe = net::Probe(url);
+        if (probe.ok && probe.contentLength > 0) {
+            totalBytes = static_cast<uint64_t>(probe.contentLength);
+        }
+
+        int threads = std::max(1, numThreads.load());
+        bool canSegment = probe.ok && probe.acceptRanges && probe.contentLength > 2 * 1024 * 1024 && threads > 1;
+
+        bool success = false;
+
+        if (canSegment) {
+            uint64_t total = static_cast<uint64_t>(probe.contentLength);
+            uint64_t partSize = total / static_cast<uint64_t>(threads);
+
+            std::vector<std::thread> workers;
+            std::vector<bool> partOk(threads, false);
+
+            for (int i = 0; i < threads; ++i) {
+                int64_t start = static_cast<int64_t>(i * partSize);
+                int64_t end = (i == threads - 1) ? static_cast<int64_t>(total - 1)
+                                                  : static_cast<int64_t>((i + 1) * partSize - 1);
+                std::string partPath = destination + ".part" + std::to_string(i);
+
+                workers.emplace_back([this, i, start, end, partPath, &partOk]() {
+                    partOk[i] = net::DownloadRange(url, partPath, start, end, downloadedBytes, stopRequested);
+                });
+            }
+
+            for (auto& w : workers) {
+                if (w.joinable()) w.join();
+            }
+
+            bool allOk = std::all_of(partOk.begin(), partOk.end(), [](bool ok) { return ok; });
+
+            if (allOk && !stopRequested) {
+                std::ofstream finalFile(destination, std::ios::binary | std::ios::trunc);
+                bool assembled = finalFile.is_open();
+                for (int i = 0; assembled && i < threads; ++i) {
+                    std::string partPath = destination + ".part" + std::to_string(i);
+                    std::ifstream partFile(partPath, std::ios::binary);
+                    if (!partFile.is_open()) {
+                        assembled = false;
+                        break;
+                    }
+                    finalFile << partFile.rdbuf();
+                }
+                finalFile.close();
+
+                for (int i = 0; i < threads; ++i) {
+                    std::error_code ec;
+                    std::filesystem::remove(destination + ".part" + std::to_string(i), ec);
+                }
+
+                success = assembled;
+            }
+        } else {
+            success = net::DownloadRange(url, destination, 0, -1, downloadedBytes, stopRequested);
+        }
+
+        if (stopRequested) {
+            return; // paused/cancelled mid-flight; state already reflects that
+        }
+
+        speed = 0.0;
+        if (success) {
+            std::error_code ec;
+            if (totalBytes == 0 && std::filesystem::exists(destination, ec)) {
+                totalBytes = static_cast<uint64_t>(std::filesystem::file_size(destination, ec));
+            }
             status = Status::Completed;
-            speed = 0.0;
             LOGI("Native download task #%d completed successfully", id);
+        } else {
+            status = Status::Error;
+            LOGE("Native download task #%d failed", id);
         }
     }
 };
@@ -234,7 +393,7 @@ public:
     }
 
 private:
-    NativeDownloadEngine() = default;
+    NativeDownloadEngine() { curl_global_init(CURL_GLOBAL_ALL); }
     int m_nextId{0};
     std::vector<std::shared_ptr<NativeDownloadTask>> m_tasks;
     std::mutex m_mutex;
@@ -251,7 +410,7 @@ JNIEXPORT jstring JNICALL
 Java_com_nishanth_1kj_internetdownloader_MainActivity_stringFromJNI(
         JNIEnv* env,
         jobject /* this */) {
-    std::string info = "Internet Downloader Native C++ Core v1.0.0 (Multi-threaded & BitTorrent)";
+    std::string info = "Internet Downloader Native C++ Core v1.0.0 (Multi-threaded, libcurl-backed)";
     return env->NewStringUTF(info.c_str());
 }
 

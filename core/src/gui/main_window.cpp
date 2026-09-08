@@ -7,6 +7,7 @@
 #include <wx/dataobj.h>
 #include <wx/artprov.h>
 #include <wx/filename.h>
+#include <wx/stdpaths.h>
 #include <wx/utils.h>
 #include <iomanip>
 #include <sstream>
@@ -55,12 +56,15 @@ wxBEGIN_EVENT_TABLE(MainWindow, wxFrame)
 {
     SetMinSize(wxSize(800, 480));
 
-    // Setup Window Icon
-    wxIcon appIcon;
-    wxBitmap appBmp = wxArtProvider::GetBitmap(wxART_HARDDISK, wxART_FRAME_ICON, wxSize(32, 32));
-    if (appBmp.IsOk())
+    // Setup Window Icon (embedded via app.rc; see IDI_ICON1)
+    wxIcon appIcon(wxICON(IDI_ICON1));
+    if (!appIcon.IsOk())
     {
-        appIcon.CopyFromBitmap(appBmp);
+        wxBitmap appBmp = wxArtProvider::GetBitmap(wxART_HARDDISK, wxART_FRAME_ICON, wxSize(32, 32));
+        if (appBmp.IsOk()) appIcon.CopyFromBitmap(appBmp);
+    }
+    if (appIcon.IsOk())
+    {
         SetIcon(appIcon);
     }
 
@@ -400,14 +404,29 @@ void MainWindow::OnAddDownload(wxCommandEvent &WXUNUSED(event))
     if (url.IsEmpty())
         return;
 
+    if (url.StartsWith("magnet:?"))
+    {
+        // Torrents are saved into a chosen folder (libtorrent lays files out using the
+        // torrent's own metadata), not to an exact file name like HTTP downloads.
+        wxDirDialog saveDlg(this, "Choose Folder To Save Torrent Payload",
+                            wxStandardPaths::Get().GetUserDir(wxStandardPaths::Dir_Downloads));
+        if (saveDlg.ShowModal() != wxID_OK)
+            return;
+
+        wxString destPath = saveDlg.GetPath() + wxFileName::GetPathSeparator() + "torrent_download";
+        idr::download::DownloadManager::GetInstance().AddDownload(url.ToStdString(), destPath.ToStdString(), true);
+        RefreshList();
+        return;
+    }
+
     wxString suggestedName = url.AfterLast('/');
     if (suggestedName.Find('?') != wxNOT_FOUND)
     {
         suggestedName = suggestedName.BeforeFirst('?');
     }
-    if (suggestedName.IsEmpty() || url.StartsWith("magnet:?"))
+    if (suggestedName.IsEmpty())
     {
-        suggestedName = url.StartsWith("magnet:?") ? "torrent_download.dat" : "download.dat";
+        suggestedName = "download.dat";
     }
 
     wxFileDialog saveDlg(this, "Save File As", "", suggestedName,
@@ -426,19 +445,61 @@ void MainWindow::OnAddTorrent(wxCommandEvent &WXUNUSED(event))
     wxFileDialog openDlg(this, "Select .torrent File", "", "",
                          "Torrent Files (*.torrent)|*.torrent|All Files (*.*)|*.*", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
 
-    if (openDlg.ShowModal() == wxID_OK)
-    {
-        wxString torrentPath = openDlg.GetPath();
-        wxString defaultDest = openDlg.GetFilename().BeforeLast('.') + ".download";
+    if (openDlg.ShowModal() != wxID_OK)
+        return;
 
-        wxFileDialog saveDlg(this, "Save Torrent Payload To", "", defaultDest,
-                             "All Files (*.*)|*.*", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
-        if (saveDlg.ShowModal() == wxID_OK)
-        {
-            idr::download::DownloadManager::GetInstance().AddDownload(torrentPath.ToStdString(), saveDlg.GetPath().ToStdString(), true);
-            RefreshList();
-        }
+    wxString torrentPath = openDlg.GetPath();
+
+    // Torrents are saved into a chosen folder (libtorrent lays files out using the
+    // torrent's own metadata), not to an exact file name like HTTP downloads.
+    wxDirDialog saveDlg(this, "Choose Folder To Save Torrent Payload",
+                        wxStandardPaths::Get().GetUserDir(wxStandardPaths::Dir_Downloads));
+    if (saveDlg.ShowModal() != wxID_OK)
+        return;
+
+    wxString destPath = saveDlg.GetPath() + wxFileName::GetPathSeparator() + openDlg.GetFilename().BeforeLast('.');
+    idr::download::DownloadManager::GetInstance().AddDownload(torrentPath.ToStdString(), destPath.ToStdString(), true);
+    RefreshList();
+}
+
+void MainWindow::AddDownloadFromExternal(const wxString &url)
+{
+    wxString trimmed = url;
+    trimmed.Trim().Trim(false);
+    if (trimmed.IsEmpty())
+        return;
+
+    wxString downloadsDir = wxStandardPaths::Get().GetUserDir(wxStandardPaths::Dir_Downloads);
+    wxString destPath;
+
+    if (trimmed.StartsWith("magnet:?") || trimmed.Lower().EndsWith(".torrent"))
+    {
+        destPath = downloadsDir + wxFileName::GetPathSeparator() + "torrent_download";
     }
+    else
+    {
+        wxString suggestedName = trimmed.AfterLast('/');
+        if (suggestedName.Find('?') != wxNOT_FOUND)
+        {
+            suggestedName = suggestedName.BeforeFirst('?');
+        }
+        if (suggestedName.IsEmpty())
+        {
+            suggestedName = "download.dat";
+        }
+        destPath = downloadsDir + wxFileName::GetPathSeparator() + suggestedName;
+    }
+
+    // Avoid clobbering an existing file of the same name.
+    wxFileName fn(destPath);
+    int counter = 1;
+    while (fn.FileExists())
+    {
+        fn.SetName(wxString::Format("%s_%d", fn.GetName(), counter++));
+    }
+
+    idr::download::DownloadManager::GetInstance().AddDownload(trimmed.ToStdString(), fn.GetFullPath().ToStdString(), true);
+    RefreshList();
 }
 
 void MainWindow::OnPauseAll(wxCommandEvent &WXUNUSED(event))
