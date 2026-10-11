@@ -12,6 +12,10 @@ on:
       - "site/**"
       - ".github/workflows/site-ci.yml"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate-site:
     name: Lint and build website
