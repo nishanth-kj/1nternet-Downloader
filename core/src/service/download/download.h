@@ -42,6 +42,8 @@ public:
     void Pause();
     void Resume();
     void Stop();
+    // Wait for the owned coordinator and all of its child workers to finish.
+    void WaitForWorker();
 
     // Getters & Setters
     int GetId() const { return m_id; }
