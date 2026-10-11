@@ -7,6 +7,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <thread>
 
 namespace idr {
 namespace torrent {
@@ -89,6 +90,10 @@ private:
 
     std::vector<DownloadSegment> m_segments;
     std::mutex m_segmentMutex;
+
+    // Own the coordinator worker so destruction cannot race detached callbacks.
+    std::mutex m_workerMutex;
+    std::thread m_workerThread;
 
     std::shared_ptr<idr::torrent::TorrentTask> m_torrentTask;
 
