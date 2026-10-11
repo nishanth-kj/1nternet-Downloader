@@ -145,29 +145,33 @@ void Download::Start() {
 }
 
 void Download::StartTorrentDownload() {
-    if (!m_torrentTask) {
-        // The GUI's save dialog hands us a *file* path (matching the HTTP download
-        // convention), but libtorrent needs a *directory* to write into — it lays
-        // files out according to the torrent's own metadata.
-        std::filesystem::path destPath(m_destination);
-        std::string saveDir = destPath.has_parent_path() ? destPath.parent_path().string() : ".";
-        if (saveDir.empty()) saveDir = ".";
-
-        m_torrentTask = idr::torrent::TorrentManager::GetInstance().AddTorrent(m_url, saveDir, true);
+    std::shared_ptr<idr::torrent::TorrentTask> torrentTask;
+    {
+        std::lock_guard<std::mutex> lock(m_torrentMutex);
         if (!m_torrentTask) {
-            m_status = DownloadStatus::Error;
-            NotifyStatusChanged();
-            return;
+            // The GUI's save dialog hands us a file path, but libtorrent needs a
+            // directory because it lays files out according to torrent metadata.
+            std::filesystem::path destPath(m_destination);
+            std::string saveDir = destPath.has_parent_path() ? destPath.parent_path().string() : ".";
+            if (saveDir.empty()) saveDir = ".";
+
+            m_torrentTask = idr::torrent::TorrentManager::GetInstance().AddTorrent(m_url, saveDir, true);
+            if (!m_torrentTask) {
+                m_status = DownloadStatus::Error;
+                NotifyStatusChanged();
+                return;
+            }
+        } else {
+            m_torrentTask->Resume();
         }
-    } else {
-        m_torrentTask->Resume();
+        torrentTask = m_torrentTask;
     }
 
     while (!m_stopRequested) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            if (m_stopRequested || !m_torrentTask) break;
+            if (m_stopRequested || !torrentTask) break;
 
-            auto snap = m_torrentTask->GetSnapshot();
+            auto snap = torrentTask->GetSnapshot();
 
             // Avoid mutating m_filename here: it's read from the UI thread and is not synchronized.
             // (If live renaming is needed, guard m_filename with a mutex shared by GetFilename().)
@@ -446,7 +450,12 @@ void Download::Pause() {
     m_stopRequested = true;
     m_status = DownloadStatus::Paused;
     m_speed = 0.0;
-    if (m_torrentTask) m_torrentTask->Pause();
+    std::shared_ptr<idr::torrent::TorrentTask> torrentTask;
+    {
+        std::lock_guard<std::mutex> lock(m_torrentMutex);
+        torrentTask = m_torrentTask;
+    }
+    if (torrentTask) torrentTask->Pause();
     NotifyStatusChanged();
 }
 
@@ -458,7 +467,12 @@ void Download::Resume() {
 
 void Download::Stop() {
     m_stopRequested = true;
-    if (m_torrentTask) m_torrentTask->Stop();
+    std::shared_ptr<idr::torrent::TorrentTask> torrentTask;
+    {
+        std::lock_guard<std::mutex> lock(m_torrentMutex);
+        torrentTask = m_torrentTask;
+    }
+    if (torrentTask) torrentTask->Stop();
     if (m_status == DownloadStatus::Downloading) {
         m_status = DownloadStatus::Paused;
     }
@@ -467,9 +481,13 @@ void Download::Stop() {
 }
 
 void Download::ReleaseTorrentResources() {
-    if (m_torrentTask) {
-        idr::torrent::TorrentManager::GetInstance().RemoveTorrent(m_torrentTask->GetId());
-        m_torrentTask.reset();
+    std::shared_ptr<idr::torrent::TorrentTask> torrentTask;
+    {
+        std::lock_guard<std::mutex> lock(m_torrentMutex);
+        torrentTask = std::move(m_torrentTask);
+    }
+    if (torrentTask) {
+        idr::torrent::TorrentManager::GetInstance().RemoveTorrent(torrentTask->GetId());
     }
 }
 
