@@ -65,9 +65,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
-    chrome.runtime.sendMessage({ action: "downloadUrl", url }, () => {
+    chrome.runtime.sendMessage({ action: "downloadUrl", url }, (response) => {
       if (chrome.runtime.lastError) {
         showToast("Could not contact the extension service");
+        return;
+      }
+      if (!response || !response.success) {
+        showToast("Could not start the handoff; browser download was not started");
         return;
       }
       showToast("Handoff requested; confirm the desktop app opens");
