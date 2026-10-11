@@ -61,7 +61,7 @@ cmake -S core -B core/build -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buil
 cmake --build core/build --config Release --parallel
 ```
 
-The CMake project uses vcpkg packages for libcurl, zlib, SQLite, nlohmann-json, fmt, spdlog, wxWidgets, SqliteOrm, and libtorrent. See `core/vcpkg.json` (if present) and the workflow configuration for the pinned dependency setup.
+The CMake project uses vcpkg packages for libcurl, zlib, SQLite, nlohmann-json, fmt, spdlog, wxWidgets, SqliteOrm, and libtorrent. See `core/vcpkg.json` and the workflow configuration for the dependency manifest and pinned CI setup.
 
 ## Android build
 

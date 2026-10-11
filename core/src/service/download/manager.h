@@ -46,6 +46,8 @@ private:
 
     std::vector<std::shared_ptr<Download>> m_downloads;
     std::mutex m_mutex;
+    // Download workers and UI actions can update the repository concurrently.
+    std::mutex m_dbMutex;
     std::unique_ptr<idr::model::DownloadDB> m_db;
 
     // Singleton semantics

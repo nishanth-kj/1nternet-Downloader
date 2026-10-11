@@ -36,6 +36,7 @@ void DownloadManager::LoadFromDatabase() {
     if (!m_db) return;
 
     try {
+        std::lock_guard<std::mutex> dbLock(m_dbMutex);
         auto records = m_db->GetAll();
         for (const auto& rec : records) {
             auto dl = std::make_shared<Download>(rec.url, rec.destination, rec.downloads_id);
@@ -72,9 +73,22 @@ std::shared_ptr<Download> DownloadManager::AddDownload(const std::string& url, c
         item.created_at = now;
         item.updated_at = now;
         try {
+            std::lock_guard<std::mutex> dbLock(m_dbMutex);
             dbId = m_db->Add(item);
         } catch (...) {
-            dbId = static_cast<int>(m_downloads.size() + 1);
+            dbId = 0;
+        }
+    }
+
+    // A failed/unavailable database must not cause duplicate IDs. Negative IDs
+    // are in-memory-only fallbacks; persisted rows keep their positive DB IDs.
+    if (dbId <= 0) {
+        dbId = -1;
+        while (std::any_of(m_downloads.begin(), m_downloads.end(),
+                           [dbId](const std::shared_ptr<Download>& existing) {
+                               return existing->GetId() == dbId;
+                           })) {
+            --dbId;
         }
     }
 
@@ -112,6 +126,7 @@ bool DownloadManager::RemoveDownload(int id, bool deleteFile) {
 
         if (m_db) {
             try {
+                std::lock_guard<std::mutex> dbLock(m_dbMutex);
                 m_db->Delete(id);
             } catch (...) {}
         }
@@ -182,6 +197,7 @@ void DownloadManager::ClearCompleted() {
         if ((*it)->GetStatus() == DownloadStatus::Completed) {
             if (m_db) {
                 try {
+                    std::lock_guard<std::mutex> dbLock(m_dbMutex);
                     m_db->Delete((*it)->GetId());
                 } catch (...) {}
             }
@@ -208,6 +224,7 @@ void DownloadManager::SyncDownloadState(Download* dl) {
         item.downloaded_bytes = dl->GetDownloadedBytes();
         item.status = static_cast<int>(dl->GetStatus());
         item.updated_at = now;
+        std::lock_guard<std::mutex> dbLock(m_dbMutex);
         m_db->Update(item);
     } catch (...) {}
 }
