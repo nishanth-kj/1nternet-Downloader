@@ -349,9 +349,11 @@ namespace idr_android
                     int64_t end = (i == threads - 1) ? static_cast<int64_t>(total - 1)
                                                      : static_cast<int64_t>((i + 1) * partSize - 1);
                     std::string partPath = destination + ".part" + std::to_string(i);
+                    std::error_code removeError;
+                    std::filesystem::remove(partPath, removeError);
 
                     workers.emplace_back([this, i, start, end, partPath, &partOk]()
-                                         { partOk[i] = net::DownloadRange(url, partPath, start, end, downloadedBytes, stopRequested); });
+                                         { partOk[i] = net::DownloadRange(url, partPath, start, end, downloadedBytes, stopRequested, true); });
                 }
 
                 for (auto &w : workers)
@@ -365,11 +367,12 @@ namespace idr_android
 
                 if (allOk && !stopRequested)
                 {
-                    std::ofstream finalFile(destination, std::ios::binary | std::ios::trunc);
+                    const std::string assembledPath = destination + ".assembling";
+                    std::ofstream finalFile(assembledPath, std::ios::binary | std::ios::trunc);
                     bool assembled = finalFile.is_open();
                     for (int i = 0; assembled && i < threads; ++i)
                     {
-                        std::string partPath = destination + ".part" + std::to_string(i);
+                        const std::string partPath = destination + ".part" + std::to_string(i);
                         std::ifstream partFile(partPath, std::ios::binary);
                         if (!partFile.is_open())
                         {
@@ -377,13 +380,35 @@ namespace idr_android
                             break;
                         }
                         finalFile << partFile.rdbuf();
+                        assembled = finalFile.good();
                     }
                     finalFile.close();
+                    assembled = assembled && finalFile.good();
 
-                    for (int i = 0; i < threads; ++i)
+                    std::error_code sizeError;
+                    if (assembled && std::filesystem::file_size(assembledPath, sizeError) == total && !sizeError)
                     {
-                        std::error_code ec;
-                        std::filesystem::remove(destination + ".part" + std::to_string(i), ec);
+                        std::error_code renameError;
+                        std::filesystem::rename(assembledPath, destination, renameError);
+                        assembled = !renameError;
+                    }
+                    else
+                    {
+                        assembled = false;
+                    }
+
+                    if (assembled)
+                    {
+                        for (int i = 0; i < threads; ++i)
+                        {
+                            std::error_code ec;
+                            std::filesystem::remove(destination + ".part" + std::to_string(i), ec);
+                        }
+                    }
+                    else
+                    {
+                        std::error_code cleanupError;
+                        std::filesystem::remove(assembledPath, cleanupError);
                     }
 
                     success = assembled;
