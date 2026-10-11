@@ -19,8 +19,10 @@ namespace {
 // Streams a data callback's chunks into an already-open ofstream, matching the
 // idr::network::DataCallback contract.
 idr::network::DataCallback MakeFileWriter(
-    std::ofstream& out, const std::function<void(size_t)>& onChunk = {}) {
-    return [&out, onChunk](const char* data, size_t len) -> size_t {
+    std::ofstream& out, const std::function<void(size_t)>& onChunk = {},
+    const std::atomic<bool>* stopRequested = nullptr) {
+    return [&out, onChunk, stopRequested](const char* data, size_t len) -> size_t {
+        if (stopRequested && stopRequested->load()) return 0;
         if (!out.write(data, static_cast<std::streamsize>(len))) return 0;
         if (onChunk) onChunk(len);
         return len;
@@ -70,6 +72,10 @@ Download::Download(const std::string& url, const std::string& destination, int d
 
 Download::~Download() {
     Stop();
+    WaitForWorker();
+}
+
+void Download::WaitForWorker() {
     std::lock_guard<std::mutex> lock(m_workerMutex);
     if (m_workerThread.joinable() &&
         m_workerThread.get_id() != std::this_thread::get_id()) {
@@ -246,7 +252,7 @@ void Download::StartMultiSegmentDownload(uint64_t totalSize, int numSegments) {
             req.rangeStart = static_cast<int64_t>(requestedStart);
             req.rangeEnd = static_cast<int64_t>(segEnd);
 
-            auto writer = MakeFileWriter(outFile);
+            auto writer = MakeFileWriter(outFile, {}, &m_stopRequested);
             auto resp = idr::network::HttpClient::Get(req, writer);
             outFile.close();
 
@@ -396,7 +402,7 @@ void Download::StartSingleDownload() {
             const auto elapsed = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - startedAt).count();
             if (elapsed > 0.0) m_speed = static_cast<double>(streamedBytes) / elapsed;
-        });
+        }, &m_stopRequested);
         auto resp = idr::network::HttpClient::Get(req, writer);
         outFile.close();
 
