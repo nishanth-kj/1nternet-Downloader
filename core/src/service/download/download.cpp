@@ -27,6 +27,14 @@ idr::network::DataCallback MakeFileWriter(
     };
 }
 
+bool HasExpectedContentRange(const idr::network::HttpResponse& response,
+                             uint64_t start, uint64_t end) {
+    const std::string header = response.headers.Get("Content-Range");
+    const std::string expectedPrefix =
+        "bytes " + std::to_string(start) + "-" + std::to_string(end) + "/";
+    return header.rfind(expectedPrefix, 0) == 0;
+}
+
 } // namespace
 
 Download::Download(const std::string& url, const std::string& destination, int dbId)
@@ -198,7 +206,13 @@ void Download::StartMultiSegmentDownload(uint64_t totalSize, int numSegments) {
                 existing = std::filesystem::file_size(partPath);
             }
 
-            if (segStart + existing > segEnd) {
+            const uint64_t expectedSize = segEnd - segStart + 1;
+            if (existing > expectedSize) {
+                std::error_code ec;
+                std::filesystem::remove(partPath, ec);
+                existing = 0;
+            }
+            if (existing == expectedSize) {
                 std::lock_guard<std::mutex> lock(m_segmentMutex);
                 m_segments[i].isCompleted = true;
                 return;
@@ -209,17 +223,22 @@ void Download::StartMultiSegmentDownload(uint64_t totalSize, int numSegments) {
 
             idr::network::HttpRequest req;
             req.url = m_url;
-            req.rangeStart = static_cast<int64_t>(segStart + existing);
+            const uint64_t requestedStart = segStart + existing;
+            req.rangeStart = static_cast<int64_t>(requestedStart);
             req.rangeEnd = static_cast<int64_t>(segEnd);
 
             auto writer = MakeFileWriter(outFile);
             auto resp = idr::network::HttpClient::Get(req, writer);
             outFile.close();
 
-            if (resp.ok && !m_stopRequested) {
-                std::lock_guard<std::mutex> lock(m_segmentMutex);
-                m_segments[i].isCompleted = true;
-            }
+            std::error_code sizeEc;
+            const uint64_t actualSize = std::filesystem::file_size(partPath, sizeEc);
+            const bool validRange = resp.statusCode == 206 &&
+                HasExpectedContentRange(resp, requestedStart, segEnd);
+            const bool validSize = !sizeEc && actualSize == expectedSize;
+
+            std::lock_guard<std::mutex> lock(m_segmentMutex);
+            m_segments[i].isCompleted = resp.ok && validRange && validSize && !m_stopRequested;
         });
     }
 
@@ -231,33 +250,65 @@ void Download::StartMultiSegmentDownload(uint64_t totalSize, int numSegments) {
 
         if (m_stopRequested) return;
 
-        // Check if all parts completed
+        // A part file is not proof of success: validate each exact range.
         bool allDone = true;
         uint64_t totalDl = 0;
         for (int i = 0; i < numSegments; ++i) {
-            std::string partPath = m_destination + ".part" + std::to_string(i);
-            if (std::filesystem::exists(partPath)) {
-                totalDl += std::filesystem::file_size(partPath);
-            } else {
+            const std::string partPath = m_destination + ".part" + std::to_string(i);
+            uint64_t expectedSize = 0;
+            {
+                std::lock_guard<std::mutex> lock(m_segmentMutex);
+                expectedSize = m_segments[i].endOffset - m_segments[i].startOffset + 1;
+                allDone = allDone && m_segments[i].isCompleted;
+            }
+            std::error_code sizeEc;
+            const uint64_t actualSize = std::filesystem::file_size(partPath, sizeEc);
+            if (sizeEc || actualSize != expectedSize) {
                 allDone = false;
+            } else {
+                totalDl += actualSize;
             }
         }
         m_downloadedBytes = totalDl;
 
-        if (allDone && totalDl >= m_totalBytes) {
-            // Assemble .part files into final destination
-            std::ofstream finalFile(m_destination, std::ios::binary);
-            for (int i = 0; i < numSegments; ++i) {
-                std::string partPath = m_destination + ".part" + std::to_string(i);
+        if (allDone && totalDl == m_totalBytes) {
+            const std::string assembledPath = m_destination + ".assembling";
+            std::ofstream finalFile(assembledPath, std::ios::binary | std::ios::trunc);
+            bool assembled = finalFile.is_open();
+            for (int i = 0; assembled && i < numSegments; ++i) {
+                const std::string partPath = m_destination + ".part" + std::to_string(i);
                 std::ifstream partFile(partPath, std::ios::binary);
+                if (!partFile.is_open()) {
+                    assembled = false;
+                    break;
+                }
                 finalFile << partFile.rdbuf();
-                partFile.close();
-                std::filesystem::remove(partPath);
+                assembled = finalFile.good();
             }
             finalFile.close();
+            assembled = assembled && finalFile.good();
 
-            m_status = DownloadStatus::Completed;
-            m_speed = 0.0;
+            std::error_code sizeEc;
+            if (assembled && std::filesystem::file_size(assembledPath, sizeEc) == m_totalBytes && !sizeEc) {
+                std::error_code renameEc;
+                std::filesystem::rename(assembledPath, m_destination, renameEc);
+                assembled = !renameEc;
+            } else {
+                assembled = false;
+            }
+
+            if (assembled) {
+                for (int i = 0; i < numSegments; ++i) {
+                    std::error_code removeEc;
+                    std::filesystem::remove(m_destination + ".part" + std::to_string(i), removeEc);
+                }
+                m_status = DownloadStatus::Completed;
+                m_speed = 0.0;
+            } else if (!m_stopRequested) {
+                m_status = DownloadStatus::Error;
+                std::error_code cleanupEc;
+                std::filesystem::remove(assembledPath, cleanupEc);
+            }
         } else if (!m_stopRequested) {
             m_status = DownloadStatus::Paused;
         }
@@ -312,7 +363,9 @@ void Download::StartSingleDownload() {
 
         bool completed = resp.ok;
         if (canResume && resp.ok) {
-            if (resp.statusCode == 206) {
+            if (resp.statusCode == 206 &&
+                resp.headers.Get("Content-Range").rfind(
+                    "bytes " + std::to_string(existingSize) + "-", 0) == 0) {
                 std::ofstream destination(m_destination, std::ios::binary | std::ios::app);
                 std::ifstream resume(streamPath, std::ios::binary);
                 destination << resume.rdbuf();
@@ -328,6 +381,12 @@ void Download::StartSingleDownload() {
             }
         }
         if (canResume) std::filesystem::remove(streamPath);
+
+        if (completed && m_totalBytes > 0) {
+            std::error_code sizeEc;
+            const uint64_t finalSize = std::filesystem::file_size(m_destination, sizeEc);
+            if (sizeEc || finalSize != m_totalBytes) completed = false;
+        }
 
         if (completed && !m_stopRequested) {
             m_status = DownloadStatus::Completed;

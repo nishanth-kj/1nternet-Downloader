@@ -12,8 +12,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Load saved settings
   const settings = await chrome.storage.local.get({
-    interceptDownloads: true,
-    interceptTorrents: true
+    interceptDownloads: false,
+    interceptTorrents: false
   });
   interceptToggle.checked = settings.interceptDownloads;
   if (torrentToggle) torrentToggle.checked = settings.interceptTorrents;
@@ -46,13 +46,31 @@ document.addEventListener("DOMContentLoaded", async () => {
   downloadBtn.addEventListener("click", () => {
     const url = urlInput.value.trim();
     if (!url) {
-      showToast("Please enter a valid URL or Magnet Link");
+      showToast("Enter an HTTP(S) URL or magnet link");
       urlInput.focus();
       return;
     }
 
-    chrome.runtime.sendMessage({ action: "downloadUrl", url: url }, () => {
-      showToast("Sent to Internet Downloader!");
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      showToast("Enter a valid URL");
+      urlInput.focus();
+      return;
+    }
+    if (!["http:", "https:", "magnet:"].includes(parsed.protocol)) {
+      showToast("Only HTTP, HTTPS, and magnet links are supported");
+      urlInput.focus();
+      return;
+    }
+
+    chrome.runtime.sendMessage({ action: "downloadUrl", url }, () => {
+      if (chrome.runtime.lastError) {
+        showToast("Could not contact the extension service");
+        return;
+      }
+      showToast("Handoff requested; confirm the desktop app opens");
       urlInput.value = "";
     });
   });

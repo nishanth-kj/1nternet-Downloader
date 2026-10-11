@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FiDownload, FiLayout } from "react-icons/fi";
+import { FiDownload } from "react-icons/fi";
 import { FaGithub } from "react-icons/fa";
 
 export function Hero() {
@@ -15,11 +15,13 @@ export function Hero() {
         Download, manage, pause, resume, and organize your downloads with a lightweight desktop application.
       </p>
       <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-        <Link 
-          href="#download"
+        <Link
+          href="https://github.com/nishanth-kj/1nternet-Downloader/releases"
+          target="_blank"
+          rel="noreferrer"
           className="inline-flex items-center justify-center rounded-md bg-primary px-8 py-3 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <FiDownload className="mr-2 h-4 w-4" /> Download for Windows
+          <FiDownload className="mr-2 h-4 w-4" /> View releases
         </Link>
         <Link 
           href="https://github.com/nishanth-kj/1nternet-Downloader"
@@ -30,13 +32,15 @@ export function Hero() {
         </Link>
       </div>
 
-      <div className="mt-16 w-full max-w-4xl rounded-xl border bg-card p-2 shadow-sm">
-        <div className="aspect-[16/9] w-full rounded-lg bg-muted flex items-center justify-center overflow-hidden border">
-          <div className="text-center p-6">
-            <FiLayout className="mx-auto h-12 w-12 text-muted-foreground mb-4 opacity-50" />
-            <p className="text-sm font-medium text-muted-foreground">Application Screenshot Placeholder</p>
-          </div>
-        </div>
+      <div className="mt-16 w-full max-w-4xl rounded-xl border bg-card p-8 shadow-sm text-left">
+        <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-5">Current capabilities</p>
+        <ul className="grid gap-4 sm:grid-cols-2">
+          <li><strong>HTTP and HTTPS</strong><p className="text-sm text-muted-foreground">Download files with progress reporting.</p></li>
+          <li><strong>Pause and resume</strong><p className="text-sm text-muted-foreground">Continue supported downloads after interruptions.</p></li>
+          <li><strong>Desktop queue</strong><p className="text-sm text-muted-foreground">Manage multiple downloads from one native app.</p></li>
+          <li><strong>Browser handoff</strong><p className="text-sm text-muted-foreground">Send supported links from the extension to the desktop app.</p></li>
+        </ul>
+        <p className="mt-6 text-xs text-muted-foreground">Feature availability differs by platform. Check the README and release notes before installing.</p>
       </div>
     </section>
   );

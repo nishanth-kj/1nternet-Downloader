@@ -17,6 +17,11 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Validate browser extension JavaScript
+        run: |
+          node --check browser/chrome/background.js
+          node --check browser/chrome/popup.js
+
       - name: Set up vcpkg
         uses: lukka/run-vcpkg@v11
         with:

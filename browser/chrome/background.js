@@ -38,16 +38,23 @@ chrome.contextMenus.onClicked.addListener((info) => {
 // Intercept browser downloads (including .torrent, .zip, .exe, etc.) if enabled
 chrome.downloads.onCreated.addListener(async (downloadItem) => {
   const settings = await chrome.storage.local.get({
-    interceptDownloads: true,
-    interceptTorrents: true
+    interceptDownloads: false,
+    interceptTorrents: false
   });
 
   const isTorrent = downloadItem.url && (downloadItem.url.startsWith("magnet:") || downloadItem.url.endsWith(".torrent") || (downloadItem.filename && downloadItem.filename.endsWith(".torrent")));
 
+  // Auto-capture is opt-in: a custom-protocol handoff cannot confirm that
+  // the desktop app accepted the URL, so cancelling by default can lose downloads.
   if ((settings.interceptDownloads || (isTorrent && settings.interceptTorrents)) && downloadItem.url) {
-    chrome.downloads.cancel(downloadItem.id);
-    chrome.downloads.erase({ id: downloadItem.id });
-    sendDownloadToApp(downloadItem.url);
+    const allowedScheme = /^https?:/i.test(downloadItem.url) || /^magnet:/i.test(downloadItem.url);
+    if (!allowedScheme) return;
+
+    chrome.downloads.cancel(downloadItem.id, () => {
+      if (chrome.runtime.lastError) return;
+      chrome.downloads.erase({ id: downloadItem.id });
+      sendDownloadToApp(downloadItem.url);
+    });
   }
 });
 

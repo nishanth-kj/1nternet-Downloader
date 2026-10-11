@@ -64,7 +64,7 @@ HttpResponse HttpClient::Head(const HttpRequest& req) {
     }
 
     FinishCommon(handle.Get(), resp);
-    resp.ok = (resp.statusCode >= 200 && resp.statusCode < 400);
+    resp.ok = (resp.statusCode >= 200 && resp.statusCode < 300);
     if (!resp.ok && resp.errorMessage.empty()) {
         resp.errorMessage = "HTTP error " + std::to_string(resp.statusCode);
     }
@@ -94,7 +94,7 @@ HttpResponse HttpClient::Get(const HttpRequest& req, const DataCallback& onData)
     }
 
     FinishCommon(handle.Get(), resp);
-    resp.ok = (resp.statusCode >= 200 && resp.statusCode < 400);
+    resp.ok = (resp.statusCode >= 200 && resp.statusCode < 300);
     if (!resp.ok && resp.errorMessage.empty()) {
         resp.errorMessage = "HTTP error " + std::to_string(resp.statusCode);
     }

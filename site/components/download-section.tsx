@@ -10,11 +10,13 @@ export function DownloadSection() {
           Get the latest version of Internet-Downloader for your desktop.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link 
-            href="#"
+          <Link
+            href="https://github.com/nishanth-kj/1nternet-Downloader/releases"
+            target="_blank"
+            rel="noreferrer"
             className="inline-flex w-full sm:w-auto items-center justify-center rounded-md bg-primary px-8 py-3 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <FiDownload className="mr-2 h-4 w-4" /> Download for Windows
+            <FiDownload className="mr-2 h-4 w-4" /> View releases
           </Link>
           <Link 
             href="https://github.com/nishanth-kj/1nternet-Downloader/releases"
