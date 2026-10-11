@@ -23,6 +23,9 @@ jobs:
 
       - name: Setup Android SDK & NDK
         uses: android-actions/setup-android@v3
+        with:
+          # The legacy "tools" SDK package is no longer published by Google's repository.
+          packages: 'platform-tools'
 
       - name: Install NDK & CMake
         run: |
