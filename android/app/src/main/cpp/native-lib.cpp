@@ -157,7 +157,8 @@ namespace idr_android
         // Downloads [start, end] (inclusive; end < 0 means "to end of file") into partPath.
         // Returns true on success.
         bool DownloadRange(const std::string &url, const std::string &partPath, int64_t start, int64_t end,
-                           std::atomic<uint64_t> &downloadedCounter, std::atomic<bool> &stopRequested)
+                           std::atomic<uint64_t> &downloadedCounter, std::atomic<bool> &stopRequested,
+                           bool requireRange = false)
         {
             std::ofstream out(partPath, std::ios::binary | std::ios::app);
             if (!out.is_open())
@@ -167,7 +168,7 @@ namespace idr_android
             if (!curl)
                 return false;
 
-            RangeWriteContext ctx{&out, &downloadedCounter, &stopRequested};
+            RangeWriteContext ctx{&out, &downloadedCounter, &stopRequested, {}};
 
             curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
             if (!(start == 0 && end < 0))
@@ -180,13 +181,33 @@ namespace idr_android
             curl_easy_setopt(curl, CURLOPT_USERAGENT, kUserAgent);
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, RangeWriteCallback);
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, &ctx);
+            curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, RangeHeaderCallback);
+            curl_easy_setopt(curl, CURLOPT_HEADERDATA, &ctx);
 
             CURLcode res = curl_easy_perform(curl);
             long httpCode = 0;
             curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
             curl_easy_cleanup(curl);
 
-            return (res == CURLE_OK && httpCode >= 200 && httpCode < 400);
+            if (res != CURLE_OK || httpCode < 200 || httpCode >= 300)
+                return false;
+
+            if (requireRange)
+            {
+                if (httpCode != 206) return false;
+                const std::string expectedPrefix = "bytes " + std::to_string(start) + "-";
+                if (ctx.contentRange.rfind(expectedPrefix, 0) != 0) return false;
+                if (end >= 0)
+                {
+                    const std::string exactPrefix = "bytes " + std::to_string(start) + "-" +
+                        std::to_string(end) + "/";
+                    if (ctx.contentRange.rfind(exactPrefix, 0) != 0) return false;
+                    std::error_code sizeError;
+                    const uint64_t actual = std::filesystem::file_size(partPath, sizeError);
+                    if (sizeError || actual != static_cast<uint64_t>(end - start + 1)) return false;
+                }
+            }
+            return true;
         }
 
     } // namespace net
