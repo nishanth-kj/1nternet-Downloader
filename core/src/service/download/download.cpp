@@ -290,9 +290,32 @@ void Download::StartMultiSegmentDownload(uint64_t totalSize, int numSegments) {
 
             std::error_code sizeEc;
             if (assembled && std::filesystem::file_size(assembledPath, sizeEc) == m_totalBytes && !sizeEc) {
-                std::error_code renameEc;
-                std::filesystem::rename(assembledPath, m_destination, renameEc);
-                assembled = !renameEc;
+                // Windows does not replace an existing destination with rename().
+                // Keep a backup until the verified temporary file is in place.
+                const std::string backupPath = m_destination + ".previous";
+                std::error_code existsEc;
+                const bool hadDestination = std::filesystem::exists(m_destination, existsEc);
+                std::error_code backupEc;
+                if (hadDestination && !existsEc) {
+                    std::filesystem::remove(backupPath, backupEc);
+                    backupEc.clear();
+                    std::filesystem::rename(m_destination, backupPath, backupEc);
+                }
+
+                if (existsEc || backupEc) {
+                    assembled = false;
+                } else {
+                    std::error_code renameEc;
+                    std::filesystem::rename(assembledPath, m_destination, renameEc);
+                    assembled = !renameEc;
+                    if (!assembled && hadDestination) {
+                        std::error_code restoreEc;
+                        std::filesystem::rename(backupPath, m_destination, restoreEc);
+                    } else if (assembled && hadDestination) {
+                        std::error_code cleanupEc;
+                        std::filesystem::remove(backupPath, cleanupEc);
+                    }
+                }
             } else {
                 assembled = false;
             }
