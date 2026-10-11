@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="classic_blue">#1A4F8B</color>
+    <color name="classic_blue_dark">#163F6E</color>
+    <color name="classic_chrome">#ECE9D8</color>
+    <color name="classic_panel">#F3F3F3</color>
+    <color name="classic_border">#808080</color>
+    <color name="classic_text">#000000</color>
+    <color name="classic_muted">#444444</color>
+    <color name="classic_white">#FFFFFF</color>
+    <color name="classic_row">#FFFFFF</color>
+    <color name="classic_danger">#8B1A1A</color>
+</resources>

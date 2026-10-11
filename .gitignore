@@ -37,12 +37,19 @@ build-*/
 out/
 CMakeUserPresets.json
 
-# IDE directories — .vscode/ is intentionally tracked (project config)
+# IDE directories
+.vscode/
 .idea/
 *.swp
 
 # Visual Studio local state
 .vs/
+
+# Temporary / offline files
+/*.html
+*.tmp
+*.temp
+*.log
 
 # ── vcpkg ────────────────────────────────────────────────────────
 vcpkg_installed/

@@ -1,5 +1,7 @@
 #include "gui/main_window.h"
 #include "service/download/manager.h"
+#include "service/network/http.h"
+#include "service/network/request.h"
 #include <wx/textdlg.h>
 #include <wx/msgdlg.h>
 #include <wx/filedlg.h>
@@ -9,52 +11,85 @@
 #include <wx/filename.h>
 #include <wx/stdpaths.h>
 #include <wx/utils.h>
+#include <wx/statbox.h>
+#include <wx/app.h>
+#include <algorithm>
 #include <iomanip>
+#include <regex>
 #include <sstream>
 #include <filesystem>
+#include <thread>
+#include <vector>
 
 wxBEGIN_EVENT_TABLE(MainWindow, wxFrame)
     EVT_CLOSE(MainWindow::OnClose)
-        EVT_MENU(wxID_EXIT, MainWindow::OnExit)
-            EVT_MENU(wxID_ABOUT, MainWindow::OnAbout)
-                EVT_MENU(ID_AddDownload, MainWindow::OnAddDownload)
-                    EVT_MENU(ID_AddTorrent, MainWindow::OnAddTorrent)
-                        EVT_MENU(ID_PauseAll, MainWindow::OnPauseAll)
-                            EVT_MENU(ID_ResumeAll, MainWindow::OnResumeAll)
-                                EVT_MENU(ID_ClearCompleted, MainWindow::OnClearCompleted)
-                                    EVT_MENU(ID_DeleteSelected, MainWindow::OnDeleteSelected)
-                                        EVT_MENU(ID_OpenDownloadFolder, MainWindow::OnOpenDownloadFolder)
+    EVT_MENU(wxID_EXIT, MainWindow::OnExit)
+    EVT_MENU(wxID_ABOUT, MainWindow::OnAbout)
+    EVT_MENU(ID_AddDownload, MainWindow::OnAddDownload)
+    EVT_MENU(ID_AddTorrent, MainWindow::OnAddTorrent)
+    EVT_MENU(ID_PauseAll, MainWindow::OnPauseAll)
+    EVT_MENU(ID_ResumeAll, MainWindow::OnResumeAll)
+    EVT_MENU(ID_ClearCompleted, MainWindow::OnClearCompleted)
+    EVT_MENU(ID_DeleteSelected, MainWindow::OnDeleteSelected)
+    EVT_MENU(ID_OpenDownloadFolder, MainWindow::OnOpenDownloadFolder)
 
-                                            EVT_TOOL(ID_AddDownload, MainWindow::OnAddDownload)
-                                                EVT_TOOL(ID_AddTorrent, MainWindow::OnAddTorrent)
-                                                    EVT_TOOL(ID_PauseAll, MainWindow::OnPauseAll)
-                                                        EVT_TOOL(ID_ResumeAll, MainWindow::OnResumeAll)
-                                                            EVT_TOOL(ID_DeleteSelected, MainWindow::OnDeleteSelected)
-                                                                EVT_TOOL(ID_ClearCompleted, MainWindow::OnClearCompleted)
-                                                                    EVT_TOOL(ID_OpenDownloadFolder, MainWindow::OnOpenDownloadFolder)
+    EVT_TOOL(ID_AddDownload, MainWindow::OnAddDownload)
+    EVT_TOOL(ID_AddTorrent, MainWindow::OnAddTorrent)
+    EVT_TOOL(ID_PauseAll, MainWindow::OnPauseAll)
+    EVT_TOOL(ID_ResumeAll, MainWindow::OnResumeAll)
+    EVT_TOOL(ID_DeleteSelected, MainWindow::OnDeleteSelected)
+    EVT_TOOL(ID_ClearCompleted, MainWindow::OnClearCompleted)
+    EVT_TOOL(ID_OpenDownloadFolder, MainWindow::OnOpenDownloadFolder)
 
-                                                                        EVT_LISTBOX(ID_Sidebar, MainWindow::OnSidebarSelected)
-                                                                            EVT_LIST_ITEM_RIGHT_CLICK(ID_DownloadList, MainWindow::OnListRightClick)
-                                                                                EVT_LIST_ITEM_ACTIVATED(ID_DownloadList, MainWindow::OnListDoubleClick)
+    EVT_BUTTON(ID_AddDownload, MainWindow::OnAddDownload)
+    EVT_BUTTON(ID_AddTorrent, MainWindow::OnAddTorrent)
+    EVT_BUTTON(ID_CtxPause, MainWindow::OnCtxPause)
+    EVT_BUTTON(ID_CtxResume, MainWindow::OnCtxResume)
+    EVT_BUTTON(ID_CtxRestart, MainWindow::OnCtxRestart)
+    EVT_BUTTON(ID_DeleteSelected, MainWindow::OnDeleteSelected)
+    EVT_BUTTON(ID_CtxOpenFile, MainWindow::OnCtxOpenFile)
+    EVT_BUTTON(ID_OpenDownloadFolder, MainWindow::OnOpenDownloadFolder)
+    EVT_BUTTON(ID_CtxCopyUrl, MainWindow::OnCtxCopyUrl)
+    EVT_BUTTON(ID_CtxViewSegments, MainWindow::OnCtxViewSegments)
+    EVT_BUTTON(ID_PauseAll, MainWindow::OnPauseAll)
+    EVT_BUTTON(ID_ResumeAll, MainWindow::OnResumeAll)
+    EVT_BUTTON(ID_ClearCompleted, MainWindow::OnClearCompleted)
+    EVT_BUTTON(wxID_ABOUT, MainWindow::OnAbout)
+    EVT_BUTTON(ID_BrowserGo, MainWindow::OnBrowserGo)
+    EVT_BUTTON(ID_BrowserBack, MainWindow::OnBrowserBack)
+    EVT_BUTTON(ID_BrowserForward, MainWindow::OnBrowserForward)
+    EVT_BUTTON(ID_BrowserGrab, MainWindow::OnBrowserGrab)
 
-                                                                                    EVT_MENU(ID_CtxPause, MainWindow::OnCtxPause)
-                                                                                        EVT_MENU(ID_CtxResume, MainWindow::OnCtxResume)
-                                                                                            EVT_MENU(ID_CtxRestart, MainWindow::OnCtxRestart)
-                                                                                                EVT_MENU(ID_CtxOpenFile, MainWindow::OnCtxOpenFile)
-                                                                                                    EVT_MENU(ID_CtxOpenFolder, MainWindow::OnCtxOpenFolder)
-                                                                                                        EVT_MENU(ID_CtxCopyUrl, MainWindow::OnCtxCopyUrl)
-                                                                                                            EVT_MENU(ID_CtxRemove, MainWindow::OnCtxRemove)
-                                                                                                                EVT_MENU(ID_CtxDeleteFile, MainWindow::OnCtxDeleteFile)
-                                                                                                                    EVT_MENU(ID_CtxViewSegments, MainWindow::OnCtxViewSegments)
+    EVT_TEXT_ENTER(ID_BrowserAddress, MainWindow::OnBrowserGo)
 
-                                                                                                                        EVT_TIMER(ID_ProgressTimer, MainWindow::OnTimer)
-                                                                                                                            wxEND_EVENT_TABLE()
+    EVT_LISTBOX(ID_Sidebar, MainWindow::OnSidebarSelected)
+    EVT_LIST_ITEM_RIGHT_CLICK(ID_DownloadList, MainWindow::OnListRightClick)
+    EVT_LIST_ITEM_ACTIVATED(ID_DownloadList, MainWindow::OnListDoubleClick)
+    EVT_LIST_ITEM_ACTIVATED(ID_BrowserLinks, MainWindow::OnBrowserLinkActivated)
 
-                                                                                                                                MainWindow::MainWindow(const wxString &title)
-    : wxFrame(NULL, wxID_ANY, title, wxDefaultPosition, wxSize(1100, 680)),
+    EVT_MENU(ID_CtxPause, MainWindow::OnCtxPause)
+    EVT_MENU(ID_CtxResume, MainWindow::OnCtxResume)
+    EVT_MENU(ID_CtxRestart, MainWindow::OnCtxRestart)
+    EVT_MENU(ID_CtxOpenFile, MainWindow::OnCtxOpenFile)
+    EVT_MENU(ID_CtxOpenFolder, MainWindow::OnCtxOpenFolder)
+    EVT_MENU(ID_CtxCopyUrl, MainWindow::OnCtxCopyUrl)
+    EVT_MENU(ID_CtxRemove, MainWindow::OnCtxRemove)
+    EVT_MENU(ID_CtxDeleteFile, MainWindow::OnCtxDeleteFile)
+    EVT_MENU(ID_CtxViewSegments, MainWindow::OnCtxViewSegments)
+    EVT_MENU(ID_BrowserGo, MainWindow::OnBrowserGo)
+    EVT_MENU(ID_BrowserBack, MainWindow::OnBrowserBack)
+    EVT_MENU(ID_BrowserForward, MainWindow::OnBrowserForward)
+    EVT_MENU(ID_BrowserGrab, MainWindow::OnBrowserGrab)
+    EVT_MENU(ID_BrowserFocus, MainWindow::OnBrowserFocus)
+
+    EVT_TIMER(ID_ProgressTimer, MainWindow::OnTimer)
+wxEND_EVENT_TABLE()
+
+MainWindow::MainWindow(const wxString &title)
+    : wxFrame(NULL, wxID_ANY, title, wxDefaultPosition, wxSize(1280, 780)),
       m_progressTimer(this, ID_ProgressTimer)
 {
-    SetMinSize(wxSize(800, 480));
+    SetMinSize(wxSize(900, 560));
 
     // Setup Window Icon (embedded via app.rc; see IDI_ICON1)
     wxIcon appIcon(wxICON(IDI_ICON1));
@@ -75,12 +110,16 @@ wxBEGIN_EVENT_TABLE(MainWindow, wxFrame)
     SetupMenuBar();
     SetupToolbar();
 
-    // Create Main Layout with Splitter
     wxBoxSizer *mainSizer = new wxBoxSizer(wxVERTICAL);
 
-    m_splitter = new wxSplitterWindow(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSP_3D | wxSP_LIVE_UPDATE);
+    m_vSplitter = new wxSplitterWindow(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSP_3D | wxSP_LIVE_UPDATE);
+    m_vSplitter->SetSashGravity(1.0);
+    m_vSplitter->SetMinimumPaneSize(140);
 
-    // Sidebar Categories (IDM Style)
+    m_hSplitter = new wxSplitterWindow(m_vSplitter, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSP_3D | wxSP_LIVE_UPDATE);
+    m_hSplitter->SetMinimumPaneSize(140);
+
+    // Sidebar Categories (classic IDM style)
     wxArrayString sidebarChoices;
     sidebarChoices.Add("All Downloads");
     sidebarChoices.Add("Active (Downloading)");
@@ -91,16 +130,24 @@ wxBEGIN_EVENT_TABLE(MainWindow, wxFrame)
     sidebarChoices.Add("Programs (.exe, .msi)");
     sidebarChoices.Add("Documents (.pdf, .doc)");
 
-    m_sidebar = new wxListBox(m_splitter, ID_Sidebar, wxDefaultPosition, wxDefaultSize, sidebarChoices, 0);
+    m_sidebar = new wxListBox(m_hSplitter, ID_Sidebar, wxDefaultPosition, wxDefaultSize, sidebarChoices, 0);
     m_sidebar->SetSelection(0);
 
-    // Download Table
+    m_contentSplitter = new wxSplitterWindow(m_hSplitter, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSP_3D | wxSP_LIVE_UPDATE);
+    m_contentSplitter->SetSashGravity(1.0);
+    m_contentSplitter->SetMinimumPaneSize(140);
+
     SetupListCtrl();
+    SetupActionPanel();
+    m_contentSplitter->SplitVertically(m_downloadList, m_actionPanel, 780);
+    m_contentSplitter->SetSashPosition(780);
 
-    m_splitter->SplitVertically(m_sidebar, m_downloadList, 210);
-    m_splitter->SetMinimumPaneSize(160);
+    m_hSplitter->SplitVertically(m_sidebar, m_contentSplitter, 190);
 
-    mainSizer->Add(m_splitter, 1, wxEXPAND | wxALL, 0);
+    SetupBrowserPanel();
+    m_vSplitter->SplitHorizontally(m_hSplitter, m_browserPanel, 480);
+
+    mainSizer->Add(m_vSplitter, 1, wxEXPAND | wxALL, 0);
     SetSizer(mainSizer);
 
     SetupStatusBar();
@@ -112,6 +159,8 @@ wxBEGIN_EVENT_TABLE(MainWindow, wxFrame)
 
 MainWindow::~MainWindow()
 {
+    if (m_alive)
+        m_alive->store(false);
     m_progressTimer.Stop();
     if (m_trayIcon)
     {
@@ -134,16 +183,36 @@ void MainWindow::SetupMenuBar()
     menuFile->AppendSeparator();
     menuFile->Append(wxID_EXIT, "E&xit\tCtrl+Q", "Exit the application completely");
 
-    // View Menu
+    wxMenu *menuDownloads = new wxMenu;
+    menuDownloads->Append(ID_CtxPause, "&Pause Selected");
+    menuDownloads->Append(ID_CtxResume, "&Resume Selected");
+    menuDownloads->Append(ID_CtxRestart, "Re&start Selected");
+    menuDownloads->Append(ID_DeleteSelected, "&Delete Selected");
+    menuDownloads->AppendSeparator();
+    menuDownloads->Append(ID_CtxOpenFile, "&Open File");
+    menuDownloads->Append(ID_OpenDownloadFolder, "Open &Containing Folder");
+    menuDownloads->Append(ID_CtxCopyUrl, "&Copy Download Link");
+    menuDownloads->Append(ID_CtxViewSegments, "View &Connections (Segments)...");
+
     wxMenu *menuView = new wxMenu;
     menuView->Append(ID_OpenDownloadFolder, "&Open Downloads Folder\tCtrl+O", "Open default downloads directory");
+    menuView->Append(ID_BrowserFocus, "Focus &Browser Address Bar\tCtrl+L", "Move keyboard focus to the bottom browser");
 
-    // Help Menu
+    wxMenu *menuBrowser = new wxMenu;
+    menuBrowser->Append(ID_BrowserFocus, "&Focus Address Bar\tCtrl+L");
+    menuBrowser->Append(ID_BrowserGo, "&Go");
+    menuBrowser->Append(ID_BrowserGrab, "Grab &Links from Page");
+    menuBrowser->AppendSeparator();
+    menuBrowser->Append(ID_BrowserBack, "&Back");
+    menuBrowser->Append(ID_BrowserForward, "&Forward");
+
     wxMenu *menuHelp = new wxMenu;
     menuHelp->Append(wxID_ABOUT, "&About Internet Downloader", "About this software");
 
     menuBar->Append(menuFile, "&File");
+    menuBar->Append(menuDownloads, "&Downloads");
     menuBar->Append(menuView, "&View");
+    menuBar->Append(menuBrowser, "&Browser");
     menuBar->Append(menuHelp, "&Help");
     SetMenuBar(menuBar);
 }
@@ -173,7 +242,7 @@ void MainWindow::SetupToolbar()
 
 void MainWindow::SetupListCtrl()
 {
-    m_downloadList = new wxListCtrl(m_splitter, ID_DownloadList, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
+    m_downloadList = new wxListCtrl(m_contentSplitter, ID_DownloadList, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
 
     m_downloadList->InsertColumn(0, "#", wxLIST_FORMAT_RIGHT, 45);
     m_downloadList->InsertColumn(1, "Filename", wxLIST_FORMAT_LEFT, 240);
@@ -183,6 +252,119 @@ void MainWindow::SetupListCtrl()
     m_downloadList->InsertColumn(5, "Threads / Peers", wxLIST_FORMAT_CENTER, 105);
     m_downloadList->InsertColumn(6, "Status", wxLIST_FORMAT_LEFT, 105);
     m_downloadList->InsertColumn(7, "URL / Source", wxLIST_FORMAT_LEFT, 220);
+}
+
+void MainWindow::SetupActionPanel()
+{
+    m_actionPanel = new wxPanel(m_contentSplitter, wxID_ANY);
+    wxStaticBoxSizer *box = new wxStaticBoxSizer(wxVERTICAL, m_actionPanel, "Tasks");
+
+    auto addBtn = [&](int id, const wxString &label) {
+        wxButton *btn = new wxButton(m_actionPanel, id, label, wxDefaultPosition, wxDefaultSize, wxBU_LEFT);
+        box->Add(btn, 0, wxEXPAND | wxBOTTOM, 2);
+    };
+
+    addBtn(ID_AddDownload, "Add URL");
+    addBtn(ID_AddTorrent, "Add Torrent");
+    box->AddSpacer(6);
+    addBtn(ID_CtxPause, "Pause");
+    addBtn(ID_CtxResume, "Resume");
+    addBtn(ID_CtxRestart, "Restart");
+    addBtn(ID_DeleteSelected, "Delete");
+    box->AddSpacer(6);
+    addBtn(ID_CtxOpenFile, "Open File");
+    addBtn(ID_OpenDownloadFolder, "Open Folder");
+    addBtn(ID_CtxCopyUrl, "Copy URL");
+    addBtn(ID_CtxViewSegments, "View Segments");
+    box->AddSpacer(6);
+    addBtn(ID_PauseAll, "Pause All");
+    addBtn(ID_ResumeAll, "Resume All");
+    addBtn(ID_ClearCompleted, "Clear Completed");
+    addBtn(wxID_ABOUT, "About");
+
+    m_actionPanel->SetSizer(box);
+}
+
+static bool LooksLikeDirectFile(const wxString &url)
+{
+    wxString path = url.BeforeFirst('?').Lower();
+    static const char *exts[] = {
+        ".zip", ".rar", ".7z", ".tar", ".gz", ".iso", ".exe", ".msi", ".dmg",
+        ".mp4", ".mkv", ".avi", ".mp3", ".flac", ".pdf", ".doc", ".docx",
+        ".torrent", ".apk", ".img", ".bin", ".xz", ".bz2", ".epub"};
+    for (const char *ext : exts)
+    {
+        if (path.EndsWith(ext))
+            return true;
+    }
+    return false;
+}
+
+static wxString JoinUrl(const wxString &base, const wxString &href)
+{
+    if (href.StartsWith("http://") || href.StartsWith("https://") || href.StartsWith("magnet:?") || href.StartsWith("ftp://"))
+        return href;
+    if (href.StartsWith("//"))
+        return "https:" + href;
+
+    wxString origin = base;
+    int schemeEnd = origin.Find("://");
+    if (schemeEnd == wxNOT_FOUND)
+        return href;
+    int pathStart = origin.find('/', schemeEnd + 3);
+    wxString root = (pathStart == wxNOT_FOUND) ? origin : origin.Left(pathStart);
+    if (href.StartsWith("/"))
+        return root + href;
+
+    wxString dir = (pathStart == wxNOT_FOUND) ? origin + "/" : origin.BeforeLast('/');
+    return dir + "/" + href;
+}
+
+static std::string LinkTypeFromUrl(const wxString &url)
+{
+    wxString path = url.BeforeFirst('?').Lower();
+    if (url.Lower().StartsWith("magnet:"))
+        return "Magnet";
+    if (path.EndsWith(".torrent"))
+        return "Torrent";
+    if (path.EndsWith(".mp4") || path.EndsWith(".mkv") || path.EndsWith(".avi"))
+        return "Video";
+    if (path.EndsWith(".zip") || path.EndsWith(".rar") || path.EndsWith(".7z") || path.EndsWith(".gz") || path.EndsWith(".xz"))
+        return "Archive";
+    if (path.EndsWith(".exe") || path.EndsWith(".msi") || path.EndsWith(".apk") || path.EndsWith(".iso"))
+        return "Program";
+    if (path.EndsWith(".pdf") || path.EndsWith(".doc") || path.EndsWith(".docx"))
+        return "Document";
+    return "Link";
+}
+
+void MainWindow::SetupBrowserPanel()
+{
+    m_browserPanel = new wxPanel(m_vSplitter, wxID_ANY);
+    wxBoxSizer *root = new wxBoxSizer(wxVERTICAL);
+
+    wxBoxSizer *titleRow = new wxBoxSizer(wxHORIZONTAL);
+    titleRow->Add(new wxStaticText(m_browserPanel, wxID_ANY, "Browser / Link Grabber"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    m_browserStatus = new wxStaticText(m_browserPanel, wxID_ANY, "Enter a URL and press Go to grab download links.");
+    titleRow->Add(m_browserStatus, 1, wxALIGN_CENTER_VERTICAL);
+    root->Add(titleRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 4);
+
+    wxBoxSizer *nav = new wxBoxSizer(wxHORIZONTAL);
+    nav->Add(new wxButton(m_browserPanel, ID_BrowserBack, "<", wxDefaultPosition, wxSize(32, -1)), 0, wxRIGHT, 2);
+    nav->Add(new wxButton(m_browserPanel, ID_BrowserForward, ">", wxDefaultPosition, wxSize(32, -1)), 0, wxRIGHT, 4);
+    m_addressBar = new wxTextCtrl(m_browserPanel, ID_BrowserAddress, "https://", wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
+    nav->Add(m_addressBar, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    nav->Add(new wxButton(m_browserPanel, ID_BrowserGo, "Go"), 0, wxRIGHT, 2);
+    nav->Add(new wxButton(m_browserPanel, ID_BrowserGrab, "Grab Links"), 0);
+    root->Add(nav, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 4);
+
+    m_browserLinks = new wxListCtrl(m_browserPanel, ID_BrowserLinks, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
+    m_browserLinks->InsertColumn(0, "Type", wxLIST_FORMAT_LEFT, 80);
+    m_browserLinks->InsertColumn(1, "Filename", wxLIST_FORMAT_LEFT, 280);
+    m_browserLinks->InsertColumn(2, "URL", wxLIST_FORMAT_LEFT, 520);
+    root->Add(m_browserLinks, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 4);
+
+    m_browserPanel->SetSizer(root);
 }
 
 void MainWindow::SetupStatusBar()
@@ -780,4 +962,147 @@ void MainWindow::OnCtxViewSegments(wxCommandEvent &WXUNUSED(event))
 void MainWindow::OnTimer(wxTimerEvent &WXUNUSED(event))
 {
     RefreshList();
+}
+
+void MainWindow::OnBrowserGo(wxCommandEvent &WXUNUSED(event))
+{
+    NavigateBrowser(m_addressBar ? m_addressBar->GetValue() : wxString(), true);
+}
+
+void MainWindow::OnBrowserFocus(wxCommandEvent &WXUNUSED(event))
+{
+    if (m_addressBar)
+        m_addressBar->SetFocus();
+}
+
+void MainWindow::OnBrowserGrab(wxCommandEvent &event)
+{
+    OnBrowserGo(event);
+}
+
+void MainWindow::OnBrowserBack(wxCommandEvent &WXUNUSED(event))
+{
+    if (m_browserHistoryIndex > 0)
+    {
+        m_browserHistoryIndex--;
+        NavigateBrowser(m_browserHistory[m_browserHistoryIndex], false);
+    }
+}
+
+void MainWindow::OnBrowserForward(wxCommandEvent &WXUNUSED(event))
+{
+    if (m_browserHistoryIndex + 1 < static_cast<int>(m_browserHistory.size()))
+    {
+        m_browserHistoryIndex++;
+        NavigateBrowser(m_browserHistory[m_browserHistoryIndex], false);
+    }
+}
+
+void MainWindow::OnBrowserLinkActivated(wxListEvent &event)
+{
+    if (!m_browserLinks)
+        return;
+    wxString url = m_browserLinks->GetItemText(event.GetIndex(), 2);
+    if (!url.IsEmpty())
+        AddDownloadFromExternal(url);
+}
+
+void MainWindow::NavigateBrowser(const wxString &rawUrl, bool pushHistory)
+{
+    wxString url = rawUrl;
+    url.Trim().Trim(false);
+    if (url.IsEmpty())
+        return;
+
+    wxString lower = url.Lower();
+    if (!lower.StartsWith("http://") && !lower.StartsWith("https://") &&
+        !lower.StartsWith("magnet:") && !lower.StartsWith("ftp://"))
+    {
+        url = "https://" + url;
+        lower = url.Lower();
+    }
+
+    if (m_addressBar)
+        m_addressBar->SetValue(url);
+
+    if (pushHistory)
+    {
+        if (m_browserHistoryIndex + 1 < static_cast<int>(m_browserHistory.size()))
+            m_browserHistory.erase(m_browserHistory.begin() + m_browserHistoryIndex + 1, m_browserHistory.end());
+        m_browserHistory.push_back(url);
+        m_browserHistoryIndex = static_cast<int>(m_browserHistory.size()) - 1;
+    }
+
+    if (lower.StartsWith("magnet:") || LooksLikeDirectFile(url))
+    {
+        if (m_browserStatus)
+            m_browserStatus->SetLabel("Starting download...");
+        AddDownloadFromExternal(url);
+        if (m_browserStatus)
+            m_browserStatus->SetLabel("Download added from browser.");
+        return;
+    }
+
+    const int requestId = ++m_browserRequestId;
+    if (m_browserStatus)
+        m_browserStatus->SetLabel("Loading page...");
+    if (m_browserLinks)
+        m_browserLinks->DeleteAllItems();
+
+    const std::string urlStd = url.ToStdString();
+    auto alive = m_alive;
+    std::thread([this, alive, requestId, urlStd]() {
+        std::string body;
+        const size_t kMax = 2 * 1024 * 1024;
+        idr::network::HttpRequest req;
+        req.url = urlStd;
+        req.timeoutSeconds = 20;
+        auto resp = idr::network::HttpClient::Get(req, [&](const char *data, size_t len) {
+            if (body.size() >= kMax)
+                return static_cast<size_t>(0);
+            size_t take = len;
+            if (body.size() + take > kMax)
+                take = kMax - body.size();
+            body.append(data, take);
+            return take;
+        });
+
+        wxTheApp->CallAfter([this, alive, requestId, resp, body, urlStd]() {
+            if (!alive || !alive->load())
+                return;
+            if (requestId != m_browserRequestId || !m_browserLinks || !m_browserStatus)
+                return;
+            if (!resp.ok)
+            {
+                wxString err = resp.errorMessage.empty() ? "HTTP error" : wxString::FromUTF8(resp.errorMessage);
+                m_browserStatus->SetLabel("Failed: " + err);
+                return;
+            }
+
+            wxString base = wxString::FromUTF8(resp.finalUrl.empty() ? urlStd : resp.finalUrl);
+            std::regex hrefRe("(?:href|src)\\s*=\\s*[\"']([^\"']+)[\"']", std::regex::icase);
+            auto it = std::sregex_iterator(body.begin(), body.end(), hrefRe);
+            auto end = std::sregex_iterator();
+
+            m_browserLinks->DeleteAllItems();
+            long row = 0;
+            for (; it != end && row < 200; ++it)
+            {
+                wxString href = wxString::FromUTF8((*it)[1].str());
+                wxString abs = JoinUrl(base, href);
+                wxString name = abs.AfterLast('/');
+                if (name.Find('?') != wxNOT_FOUND)
+                    name = name.BeforeFirst('?');
+                if (name.IsEmpty())
+                    continue;
+                long idx = m_browserLinks->InsertItem(row, wxString::FromUTF8(LinkTypeFromUrl(abs).c_str()));
+                m_browserLinks->SetItem(idx, 1, name);
+                m_browserLinks->SetItem(idx, 2, abs);
+                ++row;
+            }
+            m_browserStatus->SetLabel(wxString::Format(
+                "Grabbed %ld link%s. Double-click a row to download.",
+                row, row == 1 ? "" : "s"));
+        });
+    }).detach();
 }
