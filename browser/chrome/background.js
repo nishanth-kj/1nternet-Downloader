@@ -50,10 +50,14 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
     const allowedScheme = /^https?:/i.test(downloadItem.url) || /^magnet:/i.test(downloadItem.url);
     if (!allowedScheme) return;
 
-    chrome.downloads.cancel(downloadItem.id, () => {
-      if (chrome.runtime.lastError) return;
-      chrome.downloads.erase({ id: downloadItem.id });
-      sendDownloadToApp(downloadItem.url);
+    // Dispatch first. If the extension cannot even create the handoff tab,
+    // leave the browser's original download untouched.
+    sendDownloadToApp(downloadItem.url, (dispatched) => {
+      if (!dispatched) return;
+      chrome.downloads.cancel(downloadItem.id, () => {
+        if (chrome.runtime.lastError) return;
+        chrome.downloads.erase({ id: downloadItem.id });
+      });
     });
   }
 });
@@ -61,20 +65,35 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
 // Hands a URL/magnet link off to the desktop app via the idr:// protocol handler.
 // Opens it in a short-lived background tab: by the time we remove the tab, the
 // browser has already dispatched the "Open Internet Downloader?" OS prompt.
-function sendDownloadToApp(url) {
-  const customSchemeUrl = `idr://${encodeURIComponent(url)}`;
+function sendDownloadToApp(url, onDispatched = () => {}) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    showNotification("Unsupported download URL", "Enter a valid HTTP(S) URL or magnet link.");
+    onDispatched(false);
+    return;
+  }
 
+  if (!["http:", "https:", "magnet:"].includes(parsed.protocol)) {
+    showNotification("Unsupported download URL", "Only HTTP, HTTPS, and magnet links are supported.");
+    onDispatched(false);
+    return;
+  }
+
+  const customSchemeUrl = `idr://${encodeURIComponent(url)}`;
   chrome.tabs.create({ url: customSchemeUrl, active: false }, (tab) => {
     if (chrome.runtime.lastError || !tab) {
       showNotification("Could Not Reach Internet Downloader", url.length > 70 ? url.substring(0, 70) + "..." : url);
+      onDispatched(false);
       return;
     }
+    showNotification("Handoff requested", "Confirm that Internet Downloader opens before relying on the transfer.");
     setTimeout(() => {
       chrome.tabs.remove(tab.id, () => void chrome.runtime.lastError);
     }, 1500);
+    onDispatched(true);
   });
-
-  showNotification("Sent to Internet Downloader", url.length > 70 ? url.substring(0, 70) + "..." : url);
 }
 
 function showNotification(title, message) {
@@ -90,8 +109,10 @@ function showNotification(title, message) {
 // Message listener from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "downloadUrl") {
-    sendDownloadToApp(request.url);
-    sendResponse({ success: true });
+    sendDownloadToApp(request.url, (dispatched) => {
+      sendResponse({ success: dispatched });
+    });
+    return true;
   }
-  return true;
+  return false;
 });
