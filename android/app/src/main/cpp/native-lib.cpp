@@ -117,7 +117,26 @@ namespace idr_android
             std::ofstream *out{nullptr};
             std::atomic<uint64_t> *downloadedCounter{nullptr};
             std::atomic<bool> *stopRequested{nullptr};
+            std::string contentRange;
         };
+
+        size_t RangeHeaderCallback(char *buffer, size_t size, size_t nitems, void *userp)
+        {
+            auto *ctx = static_cast<RangeWriteContext *>(userp);
+            const size_t total = size * nitems;
+            if (!ctx) return total;
+            const std::string line(buffer, total);
+            const std::string prefix = "Content-Range:";
+            if (line.rfind(prefix, 0) == 0)
+            {
+                const size_t valueStart = line.find_first_not_of(" \t", prefix.size());
+                const size_t valueEnd = line.find_last_not_of("\r\n \t");
+                ctx->contentRange = valueStart == std::string::npos || valueEnd < valueStart
+                    ? std::string()
+                    : line.substr(valueStart, valueEnd - valueStart + 1);
+            }
+            return total;
+        }
 
         size_t RangeWriteCallback(char *contents, size_t size, size_t nmemb, void *userp)
         {
