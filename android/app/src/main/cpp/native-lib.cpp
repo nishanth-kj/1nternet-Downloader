@@ -19,6 +19,38 @@
 
 namespace idr_android
 {
+    // Escape untrusted strings before embedding them in JNI JSON responses.
+    std::string EscapeJson(const std::string &value)
+    {
+        std::string escaped;
+        escaped.reserve(value.size() + 8);
+        for (unsigned char ch : value)
+        {
+            switch (ch)
+            {
+            case '"': escaped += "\\\""; break;
+            case '\\': escaped += "\\\\"; break;
+            case '\b': escaped += "\\b"; break;
+            case '\f': escaped += "\\f"; break;
+            case '\n': escaped += "\\n"; break;
+            case '\r': escaped += "\\r"; break;
+            case '\t': escaped += "\\t"; break;
+            default:
+                if (ch < 0x20)
+                {
+                    const char hex[] = "0123456789abcdef";
+                    escaped += "\\u00";
+                    escaped += hex[(ch >> 4) & 0x0f];
+                    escaped += hex[ch & 0x0f];
+                }
+                else
+                {
+                    escaped += static_cast<char>(ch);
+                }
+            }
+        }
+        return escaped;
+    }
 
     namespace net
     {
@@ -85,7 +117,26 @@ namespace idr_android
             std::ofstream *out{nullptr};
             std::atomic<uint64_t> *downloadedCounter{nullptr};
             std::atomic<bool> *stopRequested{nullptr};
+            std::string contentRange;
         };
+
+        size_t RangeHeaderCallback(char *buffer, size_t size, size_t nitems, void *userp)
+        {
+            auto *ctx = static_cast<RangeWriteContext *>(userp);
+            const size_t total = size * nitems;
+            if (!ctx) return total;
+            const std::string line(buffer, total);
+            const std::string prefix = "Content-Range:";
+            if (line.rfind(prefix, 0) == 0)
+            {
+                const size_t valueStart = line.find_first_not_of(" \t", prefix.size());
+                const size_t valueEnd = line.find_last_not_of("\r\n \t");
+                ctx->contentRange = valueStart == std::string::npos || valueEnd < valueStart
+                    ? std::string()
+                    : line.substr(valueStart, valueEnd - valueStart + 1);
+            }
+            return total;
+        }
 
         size_t RangeWriteCallback(char *contents, size_t size, size_t nmemb, void *userp)
         {
@@ -106,7 +157,8 @@ namespace idr_android
         // Downloads [start, end] (inclusive; end < 0 means "to end of file") into partPath.
         // Returns true on success.
         bool DownloadRange(const std::string &url, const std::string &partPath, int64_t start, int64_t end,
-                           std::atomic<uint64_t> &downloadedCounter, std::atomic<bool> &stopRequested)
+                           std::atomic<uint64_t> &downloadedCounter, std::atomic<bool> &stopRequested,
+                           bool requireRange = false)
         {
             std::ofstream out(partPath, std::ios::binary | std::ios::app);
             if (!out.is_open())
@@ -116,7 +168,7 @@ namespace idr_android
             if (!curl)
                 return false;
 
-            RangeWriteContext ctx{&out, &downloadedCounter, &stopRequested};
+            RangeWriteContext ctx{&out, &downloadedCounter, &stopRequested, {}};
 
             curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
             if (!(start == 0 && end < 0))
@@ -129,13 +181,35 @@ namespace idr_android
             curl_easy_setopt(curl, CURLOPT_USERAGENT, kUserAgent);
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, RangeWriteCallback);
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, &ctx);
+            curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, RangeHeaderCallback);
+            curl_easy_setopt(curl, CURLOPT_HEADERDATA, &ctx);
 
             CURLcode res = curl_easy_perform(curl);
             long httpCode = 0;
             curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
             curl_easy_cleanup(curl);
+            out.flush();
+            if (!out.good()) return false;
 
-            return (res == CURLE_OK && httpCode >= 200 && httpCode < 400);
+            if (res != CURLE_OK || httpCode < 200 || httpCode >= 300)
+                return false;
+
+            if (requireRange)
+            {
+                if (httpCode != 206) return false;
+                const std::string expectedPrefix = "bytes " + std::to_string(start) + "-";
+                if (ctx.contentRange.rfind(expectedPrefix, 0) != 0) return false;
+                if (end >= 0)
+                {
+                    const std::string exactPrefix = "bytes " + std::to_string(start) + "-" +
+                        std::to_string(end) + "/";
+                    if (ctx.contentRange.rfind(exactPrefix, 0) != 0) return false;
+                    std::error_code sizeError;
+                    const uint64_t actual = std::filesystem::file_size(partPath, sizeError);
+                    if (sizeError || actual != static_cast<uint64_t>(end - start + 1)) return false;
+                }
+            }
+            return true;
         }
 
     } // namespace net
@@ -277,9 +351,11 @@ namespace idr_android
                     int64_t end = (i == threads - 1) ? static_cast<int64_t>(total - 1)
                                                      : static_cast<int64_t>((i + 1) * partSize - 1);
                     std::string partPath = destination + ".part" + std::to_string(i);
+                    std::error_code removeError;
+                    std::filesystem::remove(partPath, removeError);
 
                     workers.emplace_back([this, i, start, end, partPath, &partOk]()
-                                         { partOk[i] = net::DownloadRange(url, partPath, start, end, downloadedBytes, stopRequested); });
+                                         { partOk[i] = net::DownloadRange(url, partPath, start, end, downloadedBytes, stopRequested, true); });
                 }
 
                 for (auto &w : workers)
@@ -293,11 +369,12 @@ namespace idr_android
 
                 if (allOk && !stopRequested)
                 {
-                    std::ofstream finalFile(destination, std::ios::binary | std::ios::trunc);
+                    const std::string assembledPath = destination + ".assembling";
+                    std::ofstream finalFile(assembledPath, std::ios::binary | std::ios::trunc);
                     bool assembled = finalFile.is_open();
                     for (int i = 0; assembled && i < threads; ++i)
                     {
-                        std::string partPath = destination + ".part" + std::to_string(i);
+                        const std::string partPath = destination + ".part" + std::to_string(i);
                         std::ifstream partFile(partPath, std::ios::binary);
                         if (!partFile.is_open())
                         {
@@ -305,13 +382,35 @@ namespace idr_android
                             break;
                         }
                         finalFile << partFile.rdbuf();
+                        assembled = finalFile.good();
                     }
                     finalFile.close();
+                    assembled = assembled && finalFile.good();
 
-                    for (int i = 0; i < threads; ++i)
+                    std::error_code sizeError;
+                    if (assembled && std::filesystem::file_size(assembledPath, sizeError) == total && !sizeError)
                     {
-                        std::error_code ec;
-                        std::filesystem::remove(destination + ".part" + std::to_string(i), ec);
+                        std::error_code renameError;
+                        std::filesystem::rename(assembledPath, destination, renameError);
+                        assembled = !renameError;
+                    }
+                    else
+                    {
+                        assembled = false;
+                    }
+
+                    if (assembled)
+                    {
+                        for (int i = 0; i < threads; ++i)
+                        {
+                            std::error_code ec;
+                            std::filesystem::remove(destination + ".part" + std::to_string(i), ec);
+                        }
+                    }
+                    else
+                    {
+                        std::error_code cleanupError;
+                        std::filesystem::remove(assembledPath, cleanupError);
                     }
 
                     success = assembled;
@@ -319,7 +418,57 @@ namespace idr_android
             }
             else
             {
-                success = net::DownloadRange(url, destination, 0, -1, downloadedBytes, stopRequested);
+                std::error_code sizeError;
+                uint64_t existingSize = 0;
+                if (std::filesystem::exists(destination, sizeError) && !sizeError)
+                {
+                    existingSize = std::filesystem::file_size(destination, sizeError);
+                    if (sizeError) existingSize = 0;
+                }
+
+                if (existingSize > 0)
+                {
+                    // Download the remainder separately so an ignored Range response
+                    // can never append a full response body to the existing partial file.
+                    const std::string resumePath = destination + ".resume";
+                    std::error_code cleanupError;
+                    std::filesystem::remove(resumePath, cleanupError);
+                    const bool resumed = net::DownloadRange(url, resumePath,
+                        static_cast<int64_t>(existingSize), -1, downloadedBytes, stopRequested, true);
+                    if (resumed && !stopRequested)
+                    {
+                        std::ofstream output(destination, std::ios::binary | std::ios::app);
+                        std::ifstream remainder(resumePath, std::ios::binary);
+                        if (output.is_open() && remainder.is_open())
+                        {
+                            output << remainder.rdbuf();
+                            success = output.good();
+                        }
+                        output.close();
+                        std::filesystem::remove(resumePath, cleanupError);
+                        if (success && totalBytes > 0)
+                        {
+                            std::error_code finalSizeError;
+                            success = std::filesystem::file_size(destination, finalSizeError) == totalBytes &&
+                                !finalSizeError;
+                        }
+                    }
+                    else
+                    {
+                        std::filesystem::remove(resumePath, cleanupError);
+                    }
+                }
+                else
+                {
+                    std::filesystem::remove(destination, sizeError);
+                    success = net::DownloadRange(url, destination, 0, -1, downloadedBytes, stopRequested);
+                    if (success && totalBytes > 0)
+                    {
+                        std::error_code finalSizeError;
+                        success = std::filesystem::file_size(destination, finalSizeError) == totalBytes &&
+                            !finalSizeError;
+                    }
+                }
             }
 
             if (stopRequested)
@@ -413,7 +562,7 @@ namespace idr_android
                     std::stringstream ss;
                     ss << "{"
                        << "\"id\":" << t->id << ","
-                       << "\"filename\":\"" << t->filename << "\","
+                       << "\"filename\":\"" << EscapeJson(t->filename) << "\","
                        << "\"downloaded\":" << t->downloadedBytes.load() << ","
                        << "\"total\":" << t->totalBytes.load() << ","
                        << "\"speed\":" << t->speed.load() << ","
@@ -439,9 +588,9 @@ namespace idr_android
                     ss << ",";
                 ss << "{"
                    << "\"id\":" << t->id << ","
-                   << "\"filename\":\"" << t->filename << "\","
-                   << "\"url\":\"" << t->url << "\","
-                   << "\"destination\":\"" << t->destination << "\","
+                   << "\"filename\":\"" << EscapeJson(t->filename) << "\","
+                   << "\"url\":\"" << EscapeJson(t->url) << "\","
+                   << "\"destination\":\"" << EscapeJson(t->destination) << "\","
                    << "\"downloaded\":" << t->downloadedBytes.load() << ","
                    << "\"total\":" << t->totalBytes.load() << ","
                    << "\"speed\":" << t->speed.load() << ","

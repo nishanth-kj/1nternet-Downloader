@@ -8,6 +8,10 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://nishanth-kj.github.io/1nternet-Downloader/"),
+  alternates: {
+    canonical: "/1nternet-Downloader/",
+  },
   title: "Internet-Downloader | Fast & Simple Desktop Download Manager",
   description: "Download, manage, pause, resume, and organize your downloads with a lightweight desktop application.",
   keywords: ["download manager", "internet downloader", "desktop downloader", "open source downloader", "fast download", "resume download"],

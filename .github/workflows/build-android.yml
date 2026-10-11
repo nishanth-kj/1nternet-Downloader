@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main, master]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-android:
     name: Build Android APK
@@ -23,6 +27,9 @@ jobs:
 
       - name: Setup Android SDK & NDK
         uses: android-actions/setup-android@v3
+        with:
+          # The legacy "tools" SDK package is no longer published by Google's repository.
+          packages: 'platform-tools'
 
       - name: Install NDK & CMake
         run: |
@@ -46,12 +53,11 @@ jobs:
         env:
           VCPKG_ROOT: ${{ runner.workspace }}/vcpkg
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
-        run: |
-          ./gradlew assembleRelease --stacktrace || ./gradlew assembleDebug
+        run: ./gradlew assembleRelease --stacktrace
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
           name: InternetDownloader-Android-APK
-          path: android/app/build/outputs/apk/**/*.apk
+          path: android/app/build/outputs/apk/release/*.apk
 

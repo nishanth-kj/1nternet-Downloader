@@ -19,12 +19,22 @@ namespace {
 // Streams a data callback's chunks into an already-open ofstream, matching the
 // idr::network::DataCallback contract.
 idr::network::DataCallback MakeFileWriter(
-    std::ofstream& out, const std::function<void(size_t)>& onChunk = {}) {
-    return [&out, onChunk](const char* data, size_t len) -> size_t {
+    std::ofstream& out, const std::function<void(size_t)>& onChunk = {},
+    const std::atomic<bool>* stopRequested = nullptr) {
+    return [&out, onChunk, stopRequested](const char* data, size_t len) -> size_t {
+        if (stopRequested && stopRequested->load()) return 0;
         if (!out.write(data, static_cast<std::streamsize>(len))) return 0;
         if (onChunk) onChunk(len);
         return len;
     };
+}
+
+bool HasExpectedContentRange(const idr::network::HttpResponse& response,
+                             uint64_t start, uint64_t end) {
+    const std::string header = response.headers.Get("Content-Range");
+    const std::string expectedPrefix =
+        "bytes " + std::to_string(start) + "-" + std::to_string(end) + "/";
+    return header.rfind(expectedPrefix, 0) == 0;
 }
 
 } // namespace
@@ -62,6 +72,15 @@ Download::Download(const std::string& url, const std::string& destination, int d
 
 Download::~Download() {
     Stop();
+    WaitForWorker();
+}
+
+void Download::WaitForWorker() {
+    std::lock_guard<std::mutex> lock(m_workerMutex);
+    if (m_workerThread.joinable() &&
+        m_workerThread.get_id() != std::this_thread::get_id()) {
+        m_workerThread.join();
+    }
 }
 
 void Download::NotifyStatusChanged() {
@@ -76,64 +95,83 @@ std::vector<DownloadSegment> Download::GetSegments() {
 }
 
 void Download::Start() {
+    std::lock_guard<std::mutex> workerLock(m_workerMutex);
     if (m_status == DownloadStatus::Downloading) return;
+
+    // A previous worker may have finished but not yet been joined.
+    if (m_workerThread.joinable()) {
+        if (m_workerThread.get_id() == std::this_thread::get_id()) return;
+        m_workerThread.join();
+    }
 
     m_status = DownloadStatus::Downloading;
     m_stopRequested = false;
     NotifyStatusChanged();
 
     if (m_isTorrent) {
-        StartTorrentDownload();
+        m_workerThread = std::thread([this]() { StartTorrentDownload(); });
         return;
     }
 
-    // Probe server headers (Accept-Ranges and Content-Length) to decide whether we
-    // can accelerate this download with parallel byte-range connections.
-    std::thread([this]() {
-        idr::network::HttpRequest headReq;
-        headReq.url = m_url;
+    // The owned coordinator probes the server and joins all segment workers before
+    // returning. No detached thread may outlive this Download object.
+    m_workerThread = std::thread([this]() {
+        try {
+            idr::network::HttpRequest headReq;
+            headReq.url = m_url;
+            const auto headResp = idr::network::HttpClient::Head(headReq);
 
-        auto headResp = idr::network::HttpClient::Head(headReq);
+            if (m_stopRequested) return;
+            if (headResp.ok && headResp.contentLength > 0) {
+                m_totalBytes = static_cast<uint64_t>(headResp.contentLength);
+            }
 
-        if (headResp.ok && headResp.contentLength > 0) {
-            m_totalBytes = static_cast<uint64_t>(headResp.contentLength);
+            if (headResp.ok && headResp.acceptRangesBytes &&
+                headResp.contentLength > 2 * 1024 * 1024) {
+                const int numSegments =
+                    (headResp.contentLength > 50 * 1024 * 1024) ? 8 : 4;
+                StartMultiSegmentDownload(
+                    static_cast<uint64_t>(headResp.contentLength), numSegments);
+            } else {
+                StartSingleDownload();
+            }
+        } catch (...) {
+            if (!m_stopRequested) {
+                m_status = DownloadStatus::Error;
+                NotifyStatusChanged();
+            }
         }
-
-        if (headResp.ok && headResp.acceptRangesBytes && headResp.contentLength > 2 * 1024 * 1024) {
-            // Multi-segment acceleration via parallel byte-range connections.
-            int numSegments = (headResp.contentLength > 50 * 1024 * 1024) ? 8 : 4;
-            StartMultiSegmentDownload(static_cast<uint64_t>(headResp.contentLength), numSegments);
-        } else {
-            StartSingleDownload();
-        }
-    }).detach();
+    });
 }
 
 void Download::StartTorrentDownload() {
-    if (!m_torrentTask) {
-        // The GUI's save dialog hands us a *file* path (matching the HTTP download
-        // convention), but libtorrent needs a *directory* to write into — it lays
-        // files out according to the torrent's own metadata.
-        std::filesystem::path destPath(m_destination);
-        std::string saveDir = destPath.has_parent_path() ? destPath.parent_path().string() : ".";
-        if (saveDir.empty()) saveDir = ".";
-
-        m_torrentTask = idr::torrent::TorrentManager::GetInstance().AddTorrent(m_url, saveDir, true);
+    std::shared_ptr<idr::torrent::TorrentTask> torrentTask;
+    {
+        std::lock_guard<std::mutex> lock(m_torrentMutex);
         if (!m_torrentTask) {
-            m_status = DownloadStatus::Error;
-            NotifyStatusChanged();
-            return;
+            // The GUI's save dialog hands us a file path, but libtorrent needs a
+            // directory because it lays files out according to torrent metadata.
+            std::filesystem::path destPath(m_destination);
+            std::string saveDir = destPath.has_parent_path() ? destPath.parent_path().string() : ".";
+            if (saveDir.empty()) saveDir = ".";
+
+            m_torrentTask = idr::torrent::TorrentManager::GetInstance().AddTorrent(m_url, saveDir, true);
+            if (!m_torrentTask) {
+                m_status = DownloadStatus::Error;
+                NotifyStatusChanged();
+                return;
+            }
+        } else {
+            m_torrentTask->Resume();
         }
-    } else {
-        m_torrentTask->Resume();
+        torrentTask = m_torrentTask;
     }
 
-    std::thread([this]() {
-        while (!m_stopRequested) {
+    while (!m_stopRequested) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            if (m_stopRequested || !m_torrentTask) break;
+            if (m_stopRequested || !torrentTask) break;
 
-            auto snap = m_torrentTask->GetSnapshot();
+            auto snap = torrentTask->GetSnapshot();
 
             // Avoid mutating m_filename here: it's read from the UI thread and is not synchronized.
             // (If live renaming is needed, guard m_filename with a mutex shared by GetFilename().)
@@ -157,8 +195,7 @@ void Download::StartTorrentDownload() {
             }
 
             NotifyStatusChanged();
-        }
-    }).detach();
+    }
 }
 
 void Download::StartMultiSegmentDownload(uint64_t totalSize, int numSegments) {
@@ -198,7 +235,13 @@ void Download::StartMultiSegmentDownload(uint64_t totalSize, int numSegments) {
                 existing = std::filesystem::file_size(partPath);
             }
 
-            if (segStart + existing > segEnd) {
+            const uint64_t expectedSize = segEnd - segStart + 1;
+            if (existing > expectedSize) {
+                std::error_code ec;
+                std::filesystem::remove(partPath, ec);
+                existing = 0;
+            }
+            if (existing == expectedSize) {
                 std::lock_guard<std::mutex> lock(m_segmentMutex);
                 m_segments[i].isCompleted = true;
                 return;
@@ -209,67 +252,124 @@ void Download::StartMultiSegmentDownload(uint64_t totalSize, int numSegments) {
 
             idr::network::HttpRequest req;
             req.url = m_url;
-            req.rangeStart = static_cast<int64_t>(segStart + existing);
+            const uint64_t requestedStart = segStart + existing;
+            req.rangeStart = static_cast<int64_t>(requestedStart);
             req.rangeEnd = static_cast<int64_t>(segEnd);
 
-            auto writer = MakeFileWriter(outFile);
+            auto writer = MakeFileWriter(outFile, {}, &m_stopRequested);
             auto resp = idr::network::HttpClient::Get(req, writer);
             outFile.close();
 
-            if (resp.ok && !m_stopRequested) {
-                std::lock_guard<std::mutex> lock(m_segmentMutex);
-                m_segments[i].isCompleted = true;
-            }
+            std::error_code sizeEc;
+            const uint64_t actualSize = std::filesystem::file_size(partPath, sizeEc);
+            const bool validRange = resp.statusCode == 206 &&
+                HasExpectedContentRange(resp, requestedStart, segEnd);
+            const bool validSize = !sizeEc && actualSize == expectedSize;
+
+            std::lock_guard<std::mutex> lock(m_segmentMutex);
+            m_segments[i].isCompleted = resp.ok && validRange && validSize && !m_stopRequested;
         });
     }
 
-    // Monitor thread to calculate aggregate progress and stitch parts upon completion
-    std::thread([this, workers = std::move(workers), numSegments]() mutable {
-        for (auto& w : workers) {
-            if (w.joinable()) w.join();
-        }
+    // Join every segment before examining or assembling its output.
+    for (auto& worker : workers) {
+        if (worker.joinable()) worker.join();
+    }
 
-        if (m_stopRequested) return;
+    if (m_stopRequested) return;
 
-        // Check if all parts completed
+        // A part file is not proof of success: validate each exact range.
         bool allDone = true;
         uint64_t totalDl = 0;
         for (int i = 0; i < numSegments; ++i) {
-            std::string partPath = m_destination + ".part" + std::to_string(i);
-            if (std::filesystem::exists(partPath)) {
-                totalDl += std::filesystem::file_size(partPath);
-            } else {
+            const std::string partPath = m_destination + ".part" + std::to_string(i);
+            uint64_t expectedSize = 0;
+            {
+                std::lock_guard<std::mutex> lock(m_segmentMutex);
+                expectedSize = m_segments[i].endOffset - m_segments[i].startOffset + 1;
+                allDone = allDone && m_segments[i].isCompleted;
+            }
+            std::error_code sizeEc;
+            const uint64_t actualSize = std::filesystem::file_size(partPath, sizeEc);
+            if (sizeEc || actualSize != expectedSize) {
                 allDone = false;
+            } else {
+                totalDl += actualSize;
             }
         }
         m_downloadedBytes = totalDl;
 
-        if (allDone && totalDl >= m_totalBytes) {
-            // Assemble .part files into final destination
-            std::ofstream finalFile(m_destination, std::ios::binary);
-            for (int i = 0; i < numSegments; ++i) {
-                std::string partPath = m_destination + ".part" + std::to_string(i);
+        if (allDone && totalDl == m_totalBytes) {
+            const std::string assembledPath = m_destination + ".assembling";
+            std::ofstream finalFile(assembledPath, std::ios::binary | std::ios::trunc);
+            bool assembled = finalFile.is_open();
+            for (int i = 0; assembled && i < numSegments; ++i) {
+                const std::string partPath = m_destination + ".part" + std::to_string(i);
                 std::ifstream partFile(partPath, std::ios::binary);
+                if (!partFile.is_open()) {
+                    assembled = false;
+                    break;
+                }
                 finalFile << partFile.rdbuf();
-                partFile.close();
-                std::filesystem::remove(partPath);
+                assembled = finalFile.good();
             }
             finalFile.close();
+            assembled = assembled && finalFile.good();
 
-            m_status = DownloadStatus::Completed;
-            m_speed = 0.0;
+            std::error_code sizeEc;
+            if (assembled && std::filesystem::file_size(assembledPath, sizeEc) == m_totalBytes && !sizeEc) {
+                // Windows does not replace an existing destination with rename().
+                // Keep a backup until the verified temporary file is in place.
+                const std::string backupPath = m_destination + ".previous";
+                std::error_code existsEc;
+                const bool hadDestination = std::filesystem::exists(m_destination, existsEc);
+                std::error_code backupEc;
+                if (hadDestination && !existsEc) {
+                    std::filesystem::remove(backupPath, backupEc);
+                    backupEc.clear();
+                    std::filesystem::rename(m_destination, backupPath, backupEc);
+                }
+
+                if (existsEc || backupEc) {
+                    assembled = false;
+                } else {
+                    std::error_code renameEc;
+                    std::filesystem::rename(assembledPath, m_destination, renameEc);
+                    assembled = !renameEc;
+                    if (!assembled && hadDestination) {
+                        std::error_code restoreEc;
+                        std::filesystem::rename(backupPath, m_destination, restoreEc);
+                    } else if (assembled && hadDestination) {
+                        std::error_code cleanupEc;
+                        std::filesystem::remove(backupPath, cleanupEc);
+                    }
+                }
+            } else {
+                assembled = false;
+            }
+
+            if (assembled) {
+                for (int i = 0; i < numSegments; ++i) {
+                    std::error_code removeEc;
+                    std::filesystem::remove(m_destination + ".part" + std::to_string(i), removeEc);
+                }
+                m_status = DownloadStatus::Completed;
+                m_speed = 0.0;
+            } else if (!m_stopRequested) {
+                m_status = DownloadStatus::Error;
+                std::error_code cleanupEc;
+                std::filesystem::remove(assembledPath, cleanupEc);
+            }
         } else if (!m_stopRequested) {
             m_status = DownloadStatus::Paused;
         }
         NotifyStatusChanged();
-    }).detach();
 }
 
 void Download::StartSingleDownload() {
     m_segmentCount = 1;
 
-    std::thread([this]() {
-        uint64_t existingSize = 0;
+    uint64_t existingSize = 0;
         if (std::filesystem::exists(m_destination)) {
             existingSize = std::filesystem::file_size(m_destination);
         }
@@ -306,13 +406,15 @@ void Download::StartSingleDownload() {
             const auto elapsed = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - startedAt).count();
             if (elapsed > 0.0) m_speed = static_cast<double>(streamedBytes) / elapsed;
-        });
+        }, &m_stopRequested);
         auto resp = idr::network::HttpClient::Get(req, writer);
         outFile.close();
 
         bool completed = resp.ok;
         if (canResume && resp.ok) {
-            if (resp.statusCode == 206) {
+            if (resp.statusCode == 206 &&
+                resp.headers.Get("Content-Range").rfind(
+                    "bytes " + std::to_string(existingSize) + "-", 0) == 0) {
                 std::ofstream destination(m_destination, std::ios::binary | std::ios::app);
                 std::ifstream resume(streamPath, std::ios::binary);
                 destination << resume.rdbuf();
@@ -329,6 +431,12 @@ void Download::StartSingleDownload() {
         }
         if (canResume) std::filesystem::remove(streamPath);
 
+        if (completed && m_totalBytes > 0) {
+            std::error_code sizeEc;
+            const uint64_t finalSize = std::filesystem::file_size(m_destination, sizeEc);
+            if (sizeEc || finalSize != m_totalBytes) completed = false;
+        }
+
         if (completed && !m_stopRequested) {
             m_status = DownloadStatus::Completed;
             m_speed = 0.0;
@@ -336,14 +444,18 @@ void Download::StartSingleDownload() {
             m_status = DownloadStatus::Error;
         }
         NotifyStatusChanged();
-    }).detach();
 }
 
 void Download::Pause() {
     m_stopRequested = true;
     m_status = DownloadStatus::Paused;
     m_speed = 0.0;
-    if (m_torrentTask) m_torrentTask->Pause();
+    std::shared_ptr<idr::torrent::TorrentTask> torrentTask;
+    {
+        std::lock_guard<std::mutex> lock(m_torrentMutex);
+        torrentTask = m_torrentTask;
+    }
+    if (torrentTask) torrentTask->Pause();
     NotifyStatusChanged();
 }
 
@@ -355,7 +467,12 @@ void Download::Resume() {
 
 void Download::Stop() {
     m_stopRequested = true;
-    if (m_torrentTask) m_torrentTask->Stop();
+    std::shared_ptr<idr::torrent::TorrentTask> torrentTask;
+    {
+        std::lock_guard<std::mutex> lock(m_torrentMutex);
+        torrentTask = m_torrentTask;
+    }
+    if (torrentTask) torrentTask->Stop();
     if (m_status == DownloadStatus::Downloading) {
         m_status = DownloadStatus::Paused;
     }
@@ -364,9 +481,13 @@ void Download::Stop() {
 }
 
 void Download::ReleaseTorrentResources() {
-    if (m_torrentTask) {
-        idr::torrent::TorrentManager::GetInstance().RemoveTorrent(m_torrentTask->GetId());
-        m_torrentTask.reset();
+    std::shared_ptr<idr::torrent::TorrentTask> torrentTask;
+    {
+        std::lock_guard<std::mutex> lock(m_torrentMutex);
+        torrentTask = std::move(m_torrentTask);
+    }
+    if (torrentTask) {
+        idr::torrent::TorrentManager::GetInstance().RemoveTorrent(torrentTask->GetId());
     }
 }
 

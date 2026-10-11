@@ -75,7 +75,7 @@ namespace idr
             }
 
             FinishCommon(handle.Get(), resp);
-            resp.ok = (resp.statusCode >= 200 && resp.statusCode < 400);
+            resp.ok = (resp.statusCode >= 200 && resp.statusCode < 300);
             if (!resp.ok && resp.errorMessage.empty())
             {
                 resp.errorMessage = "HTTP error " + std::to_string(resp.statusCode);
@@ -109,7 +109,7 @@ namespace idr
             }
 
             FinishCommon(handle.Get(), resp);
-            resp.ok = (resp.statusCode >= 200 && resp.statusCode < 400);
+            resp.ok = (resp.statusCode >= 200 && resp.statusCode < 300);
             if (!resp.ok && resp.errorMessage.empty())
             {
                 resp.errorMessage = "HTTP error " + std::to_string(resp.statusCode);

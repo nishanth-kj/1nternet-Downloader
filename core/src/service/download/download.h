@@ -7,6 +7,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <thread>
 
 namespace idr {
 namespace torrent {
@@ -41,6 +42,8 @@ public:
     void Pause();
     void Resume();
     void Stop();
+    // Wait for the owned coordinator and all of its child workers to finish.
+    void WaitForWorker();
 
     // Getters & Setters
     int GetId() const { return m_id; }
@@ -90,6 +93,11 @@ private:
     std::vector<DownloadSegment> m_segments;
     std::mutex m_segmentMutex;
 
+    // Own the coordinator worker so destruction cannot race detached callbacks.
+    std::mutex m_workerMutex;
+    std::thread m_workerThread;
+
+    std::mutex m_torrentMutex;
     std::shared_ptr<idr::torrent::TorrentTask> m_torrentTask;
 
     void NotifyStatusChanged();
