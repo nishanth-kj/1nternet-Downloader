@@ -4,7 +4,10 @@
 #include <wx/listctrl.h>
 #include <wx/splitter.h>
 #include <wx/listbox.h>
+#include <atomic>
 #include <memory>
+#include <string>
+#include <vector>
 #include "gui/tray_icon.h"
 
 class MainWindow : public wxFrame
@@ -49,24 +52,46 @@ private:
     void OnCtxDeleteFile(wxCommandEvent& event);
     void OnCtxViewSegments(wxCommandEvent& event);
 
+    // Browser / link grabber
+    void OnBrowserGo(wxCommandEvent& event);
+    void OnBrowserBack(wxCommandEvent& event);
+    void OnBrowserForward(wxCommandEvent& event);
+    void OnBrowserGrab(wxCommandEvent& event);
+    void OnBrowserFocus(wxCommandEvent& event);
+    void OnBrowserLinkActivated(wxListEvent& event);
+    void NavigateBrowser(const wxString& url, bool pushHistory);
+
     // UI Setup helpers
     void SetupMenuBar();
     void SetupToolbar();
     void SetupListCtrl();
+    void SetupActionPanel();
+    void SetupBrowserPanel();
     void SetupStatusBar();
 
     int GetSelectedDownloadId();
 
     // UI Elements
-    wxSplitterWindow* m_splitter{nullptr};
+    wxSplitterWindow* m_vSplitter{nullptr};
+    wxSplitterWindow* m_hSplitter{nullptr};
+    wxSplitterWindow* m_contentSplitter{nullptr};
     wxListBox* m_sidebar{nullptr};
     wxListCtrl* m_downloadList{nullptr};
+    wxPanel* m_actionPanel{nullptr};
+    wxPanel* m_browserPanel{nullptr};
+    wxTextCtrl* m_addressBar{nullptr};
+    wxListCtrl* m_browserLinks{nullptr};
+    wxStaticText* m_browserStatus{nullptr};
     wxToolBar* m_toolbar{nullptr};
     wxTimer m_progressTimer;
     std::unique_ptr<AppTrayIcon> m_trayIcon;
 
     int m_selectedCategory{0};
     bool m_forceExit{false};
+    int m_browserRequestId{0};
+    std::vector<wxString> m_browserHistory;
+    int m_browserHistoryIndex{-1};
+    std::shared_ptr<std::atomic<bool>> m_alive{std::make_shared<std::atomic<bool>>(true)};
 
     wxDECLARE_EVENT_TABLE();
 };
@@ -93,5 +118,14 @@ enum
     ID_CtxCopyUrl,
     ID_CtxRemove,
     ID_CtxDeleteFile,
-    ID_CtxViewSegments
+    ID_CtxViewSegments,
+
+    // Browser
+    ID_BrowserGo = 300,
+    ID_BrowserBack,
+    ID_BrowserForward,
+    ID_BrowserGrab,
+    ID_BrowserAddress,
+    ID_BrowserLinks,
+    ID_BrowserFocus
 };

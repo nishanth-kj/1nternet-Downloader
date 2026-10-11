@@ -2,7 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "export",
-  basePath: "/1nternet-Downloader",
+  basePath: process.env.NODE_ENV === "production" ? "/1nternet-Downloader" : "",
+  trailingSlash: true,
   images: { unoptimized: true },
 };
 

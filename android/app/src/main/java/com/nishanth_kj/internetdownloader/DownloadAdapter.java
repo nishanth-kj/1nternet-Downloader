@@ -1,5 +1,6 @@
 package com.nishanth_kj.internetdownloader;
 
+import android.graphics.Color;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,10 +18,12 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
         void onPause(DownloadItem item);
         void onResume(DownloadItem item);
         void onCancel(DownloadItem item);
+        void onOpen(DownloadItem item);
     }
 
     private List<DownloadItem> items = new ArrayList<>();
     private final OnDownloadActionListener listener;
+    private int selectedId = -1;
 
     public DownloadAdapter(OnDownloadActionListener listener) {
         this.listener = listener;
@@ -28,7 +31,26 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
 
     public void updateList(List<DownloadItem> newItems) {
         this.items = newItems;
+        boolean stillSelected = false;
+        for (DownloadItem item : items) {
+            if (item.id == selectedId) {
+                stillSelected = true;
+                break;
+            }
+        }
+        if (!stillSelected && !items.isEmpty()) {
+            selectedId = items.get(0).id;
+        } else if (items.isEmpty()) {
+            selectedId = -1;
+        }
         notifyDataSetChanged();
+    }
+
+    public DownloadItem getSelectedItem() {
+        for (DownloadItem item : items) {
+            if (item.id == selectedId) return item;
+        }
+        return null;
     }
 
     @NonNull
@@ -49,29 +71,45 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
         String progressText = item.getFormattedDownloaded() + " / " + item.getFormattedTotal() + " (" + item.getProgressPercent() + "%)";
         holder.tvProgress.setText(progressText);
 
-        if (item.status == 1) { // Downloading
+        if (item.status == 1) {
             holder.tvSpeed.setText(item.getFormattedSpeed());
             holder.btnPauseResume.setText("Pause");
-        } else if (item.status == 2) { // Paused
+        } else if (item.status == 2) {
             holder.tvSpeed.setText("Paused");
             holder.btnPauseResume.setText("Resume");
-        } else if (item.status == 3) { // Completed
+        } else if (item.status == 3) {
             holder.tvSpeed.setText("Completed");
             holder.btnPauseResume.setText("Open");
+        } else if (item.status == 4) {
+            holder.tvSpeed.setText("Error");
+            holder.btnPauseResume.setText("Resume");
         } else {
             holder.tvSpeed.setText("Queued");
             holder.btnPauseResume.setText("Start");
         }
 
+        holder.itemView.setBackgroundColor(item.id == selectedId ? Color.parseColor("#DCE8F7") : Color.WHITE);
+
+        holder.itemView.setOnClickListener(v -> {
+            selectedId = item.id;
+            notifyDataSetChanged();
+        });
+
         holder.btnPauseResume.setOnClickListener(v -> {
+            selectedId = item.id;
             if (item.status == 1) {
                 listener.onPause(item);
+            } else if (item.status == 3) {
+                listener.onOpen(item);
             } else {
                 listener.onResume(item);
             }
         });
 
-        holder.btnCancel.setOnClickListener(v -> listener.onCancel(item));
+        holder.btnCancel.setOnClickListener(v -> {
+            selectedId = item.id;
+            listener.onCancel(item);
+        });
     }
 
     @Override
@@ -96,4 +134,3 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
         }
     }
 }
-
