@@ -416,7 +416,57 @@ namespace idr_android
             }
             else
             {
-                success = net::DownloadRange(url, destination, 0, -1, downloadedBytes, stopRequested);
+                std::error_code sizeError;
+                uint64_t existingSize = 0;
+                if (std::filesystem::exists(destination, sizeError) && !sizeError)
+                {
+                    existingSize = std::filesystem::file_size(destination, sizeError);
+                    if (sizeError) existingSize = 0;
+                }
+
+                if (existingSize > 0)
+                {
+                    // Download the remainder separately so an ignored Range response
+                    // can never append a full response body to the existing partial file.
+                    const std::string resumePath = destination + ".resume";
+                    std::error_code cleanupError;
+                    std::filesystem::remove(resumePath, cleanupError);
+                    const bool resumed = net::DownloadRange(url, resumePath,
+                        static_cast<int64_t>(existingSize), -1, downloadedBytes, stopRequested, true);
+                    if (resumed && !stopRequested)
+                    {
+                        std::ofstream output(destination, std::ios::binary | std::ios::app);
+                        std::ifstream remainder(resumePath, std::ios::binary);
+                        if (output.is_open() && remainder.is_open())
+                        {
+                            output << remainder.rdbuf();
+                            success = output.good();
+                        }
+                        output.close();
+                        std::filesystem::remove(resumePath, cleanupError);
+                        if (success && totalBytes > 0)
+                        {
+                            std::error_code finalSizeError;
+                            success = std::filesystem::file_size(destination, finalSizeError) == totalBytes &&
+                                !finalSizeError;
+                        }
+                    }
+                    else
+                    {
+                        std::filesystem::remove(resumePath, cleanupError);
+                    }
+                }
+                else
+                {
+                    std::filesystem::remove(destination, sizeError);
+                    success = net::DownloadRange(url, destination, 0, -1, downloadedBytes, stopRequested);
+                    if (success && totalBytes > 0)
+                    {
+                        std::error_code finalSizeError;
+                        success = std::filesystem::file_size(destination, finalSizeError) == totalBytes &&
+                            !finalSizeError;
+                    }
+                }
             }
 
             if (stopRequested)
