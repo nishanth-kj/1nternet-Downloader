@@ -188,6 +188,8 @@ namespace idr_android
             long httpCode = 0;
             curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
             curl_easy_cleanup(curl);
+            out.flush();
+            if (!out.good()) return false;
 
             if (res != CURLE_OK || httpCode < 200 || httpCode >= 300)
                 return false;
