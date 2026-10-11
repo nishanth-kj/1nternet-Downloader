@@ -15,6 +15,19 @@ DownloadManager::DownloadManager() {
 
 DownloadManager::~DownloadManager() {
     PauseAll();
+
+    auto downloads = GetDownloads();
+    for (const auto& download : downloads) {
+        download->WaitForWorker();
+        // Externally held Download handles must not callback into a manager
+        // whose database and mutex are being destroyed.
+        download->SetOnStatusChanged({});
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_downloads.clear();
+    }
     curl_global_cleanup();
 }
 
@@ -89,6 +102,7 @@ bool DownloadManager::RemoveDownload(int id, bool deleteFile) {
     if (it != m_downloads.end()) {
         auto dl = *it;
         dl->Stop();
+        dl->WaitForWorker();
         dl->ReleaseTorrentResources();
 
         if (deleteFile) {
