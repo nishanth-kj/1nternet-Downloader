@@ -445,7 +445,7 @@ namespace idr_android
                     std::stringstream ss;
                     ss << "{"
                        << "\"id\":" << t->id << ","
-                       << "\"filename\":\"" << t->filename << "\","
+                       << "\"filename\":\"" << EscapeJson(t->filename) << "\","
                        << "\"downloaded\":" << t->downloadedBytes.load() << ","
                        << "\"total\":" << t->totalBytes.load() << ","
                        << "\"speed\":" << t->speed.load() << ","
@@ -471,9 +471,9 @@ namespace idr_android
                     ss << ",";
                 ss << "{"
                    << "\"id\":" << t->id << ","
-                   << "\"filename\":\"" << t->filename << "\","
-                   << "\"url\":\"" << t->url << "\","
-                   << "\"destination\":\"" << t->destination << "\","
+                   << "\"filename\":\"" << EscapeJson(t->filename) << "\","
+                   << "\"url\":\"" << EscapeJson(t->url) << "\","
+                   << "\"destination\":\"" << EscapeJson(t->destination) << "\","
                    << "\"downloaded\":" << t->downloadedBytes.load() << ","
                    << "\"total\":" << t->totalBytes.load() << ","
                    << "\"speed\":" << t->speed.load() << ","
