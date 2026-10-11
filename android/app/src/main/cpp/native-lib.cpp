@@ -19,6 +19,38 @@
 
 namespace idr_android
 {
+    // Escape untrusted strings before embedding them in JNI JSON responses.
+    std::string EscapeJson(const std::string &value)
+    {
+        std::string escaped;
+        escaped.reserve(value.size() + 8);
+        for (unsigned char ch : value)
+        {
+            switch (ch)
+            {
+            case '"': escaped += "\\\""; break;
+            case '\\': escaped += "\\\\"; break;
+            case '\b': escaped += "\\b"; break;
+            case '\f': escaped += "\\f"; break;
+            case '\n': escaped += "\\n"; break;
+            case '\r': escaped += "\\r"; break;
+            case '\t': escaped += "\\t"; break;
+            default:
+                if (ch < 0x20)
+                {
+                    const char hex[] = "0123456789abcdef";
+                    escaped += "\\u00";
+                    escaped += hex[(ch >> 4) & 0x0f];
+                    escaped += hex[ch & 0x0f];
+                }
+                else
+                {
+                    escaped += static_cast<char>(ch);
+                }
+            }
+        }
+        return escaped;
+    }
 
     namespace net
     {
