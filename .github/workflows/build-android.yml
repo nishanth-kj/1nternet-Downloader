@@ -49,12 +49,11 @@ jobs:
         env:
           VCPKG_ROOT: ${{ runner.workspace }}/vcpkg
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
-        run: |
-          ./gradlew assembleRelease --stacktrace || ./gradlew assembleDebug
+        run: ./gradlew assembleRelease --stacktrace
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
           name: InternetDownloader-Android-APK
-          path: android/app/build/outputs/apk/**/*.apk
+          path: android/app/build/outputs/apk/release/*.apk
 
