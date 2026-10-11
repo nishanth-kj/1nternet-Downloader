@@ -70,6 +70,11 @@ Download::Download(const std::string& url, const std::string& destination, int d
 
 Download::~Download() {
     Stop();
+    std::lock_guard<std::mutex> lock(m_workerMutex);
+    if (m_workerThread.joinable() &&
+        m_workerThread.get_id() != std::this_thread::get_id()) {
+        m_workerThread.join();
+    }
 }
 
 void Download::NotifyStatusChanged() {
@@ -84,37 +89,53 @@ std::vector<DownloadSegment> Download::GetSegments() {
 }
 
 void Download::Start() {
+    std::lock_guard<std::mutex> workerLock(m_workerMutex);
     if (m_status == DownloadStatus::Downloading) return;
+
+    // A previous worker may have finished but not yet been joined.
+    if (m_workerThread.joinable()) {
+        if (m_workerThread.get_id() == std::this_thread::get_id()) return;
+        m_workerThread.join();
+    }
 
     m_status = DownloadStatus::Downloading;
     m_stopRequested = false;
     NotifyStatusChanged();
 
     if (m_isTorrent) {
-        StartTorrentDownload();
+        m_workerThread = std::thread([this]() { StartTorrentDownload(); });
         return;
     }
 
-    // Probe server headers (Accept-Ranges and Content-Length) to decide whether we
-    // can accelerate this download with parallel byte-range connections.
-    std::thread([this]() {
-        idr::network::HttpRequest headReq;
-        headReq.url = m_url;
+    // The owned coordinator probes the server and joins all segment workers before
+    // returning. No detached thread may outlive this Download object.
+    m_workerThread = std::thread([this]() {
+        try {
+            idr::network::HttpRequest headReq;
+            headReq.url = m_url;
+            const auto headResp = idr::network::HttpClient::Head(headReq);
 
-        auto headResp = idr::network::HttpClient::Head(headReq);
+            if (m_stopRequested) return;
+            if (headResp.ok && headResp.contentLength > 0) {
+                m_totalBytes = static_cast<uint64_t>(headResp.contentLength);
+            }
 
-        if (headResp.ok && headResp.contentLength > 0) {
-            m_totalBytes = static_cast<uint64_t>(headResp.contentLength);
+            if (headResp.ok && headResp.acceptRangesBytes &&
+                headResp.contentLength > 2 * 1024 * 1024) {
+                const int numSegments =
+                    (headResp.contentLength > 50 * 1024 * 1024) ? 8 : 4;
+                StartMultiSegmentDownload(
+                    static_cast<uint64_t>(headResp.contentLength), numSegments);
+            } else {
+                StartSingleDownload();
+            }
+        } catch (...) {
+            if (!m_stopRequested) {
+                m_status = DownloadStatus::Error;
+                NotifyStatusChanged();
+            }
         }
-
-        if (headResp.ok && headResp.acceptRangesBytes && headResp.contentLength > 2 * 1024 * 1024) {
-            // Multi-segment acceleration via parallel byte-range connections.
-            int numSegments = (headResp.contentLength > 50 * 1024 * 1024) ? 8 : 4;
-            StartMultiSegmentDownload(static_cast<uint64_t>(headResp.contentLength), numSegments);
-        } else {
-            StartSingleDownload();
-        }
-    }).detach();
+    });
 }
 
 void Download::StartTorrentDownload() {
@@ -136,8 +157,7 @@ void Download::StartTorrentDownload() {
         m_torrentTask->Resume();
     }
 
-    std::thread([this]() {
-        while (!m_stopRequested) {
+    while (!m_stopRequested) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
             if (m_stopRequested || !m_torrentTask) break;
 
@@ -165,8 +185,7 @@ void Download::StartTorrentDownload() {
             }
 
             NotifyStatusChanged();
-        }
-    }).detach();
+    }
 }
 
 void Download::StartMultiSegmentDownload(uint64_t totalSize, int numSegments) {
@@ -242,13 +261,12 @@ void Download::StartMultiSegmentDownload(uint64_t totalSize, int numSegments) {
         });
     }
 
-    // Monitor thread to calculate aggregate progress and stitch parts upon completion
-    std::thread([this, workers = std::move(workers), numSegments]() mutable {
-        for (auto& w : workers) {
-            if (w.joinable()) w.join();
-        }
+    // Join every segment before examining or assembling its output.
+    for (auto& worker : workers) {
+        if (worker.joinable()) worker.join();
+    }
 
-        if (m_stopRequested) return;
+    if (m_stopRequested) return;
 
         // A part file is not proof of success: validate each exact range.
         bool allDone = true;
@@ -336,14 +354,12 @@ void Download::StartMultiSegmentDownload(uint64_t totalSize, int numSegments) {
             m_status = DownloadStatus::Paused;
         }
         NotifyStatusChanged();
-    }).detach();
 }
 
 void Download::StartSingleDownload() {
     m_segmentCount = 1;
 
-    std::thread([this]() {
-        uint64_t existingSize = 0;
+    uint64_t existingSize = 0;
         if (std::filesystem::exists(m_destination)) {
             existingSize = std::filesystem::file_size(m_destination);
         }
@@ -418,7 +434,6 @@ void Download::StartSingleDownload() {
             m_status = DownloadStatus::Error;
         }
         NotifyStatusChanged();
-    }).detach();
 }
 
 void Download::Pause() {
