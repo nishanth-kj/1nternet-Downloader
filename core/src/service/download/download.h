@@ -97,6 +97,7 @@ private:
     std::mutex m_workerMutex;
     std::thread m_workerThread;
 
+    std::mutex m_torrentMutex;
     std::shared_ptr<idr::torrent::TorrentTask> m_torrentTask;
 
     void NotifyStatusChanged();
