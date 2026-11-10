@@ -22,9 +22,18 @@ jobs:
           submodules: recursive
 
       - name: Validate browser extension JavaScript
+        shell: bash
         run: |
-          node --check browser/chrome/background.js
-          node --check browser/chrome/popup.js
+          for b in chrome edge brave opera firefox safari; do
+            node --check "browser/$b/background.js"
+            node --check "browser/$b/popup.js"
+          done
+          # The copies must not drift: popup.js is identical everywhere, and
+          # background.js differs only in browser-specific header comments.
+          for b in edge brave opera firefox safari; do
+            cmp browser/chrome/popup.js "browser/$b/popup.js"
+            diff <(grep -v '^//' browser/chrome/background.js) <(grep -v '^//' "browser/$b/background.js")
+          done
 
       - name: Set up vcpkg
         uses: lukka/run-vcpkg@v11
