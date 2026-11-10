@@ -1,134 +1,64 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+Instructions for AI coding agents working in this repository. This is the canonical
+cross-tool file. `CLAUDE.md` imports it. Detailed docs live in [`agents/`](agents/README.md).
 
-## Project Purpose
+## What this is
 
-Internet Downloader ("IDR") is a download manager: multi-threaded/segmented HTTP(S) downloads plus real BitTorrent support (via libtorrent). The repo is a monorepo containing four products that share a name but are built/verified independently:
+Internet Downloader ("IDR") is a download manager. The monorepo contains four
+independently built products:
 
-- **`core/`** — the flagship product: a native Windows desktop app (C++ / wxWidgets). This is where almost all real engine work lives.
-- **`android/`** — an Android app with its own native (JNI/NDK) download engine, statically linking a cross-compiled libcurl.
-- **`browser/`** — MV3 browser extensions (Chrome, Edge, Brave, Opera, Firefox, Safari) that hand links off to the desktop app via a custom `idr://` protocol.
-- **`site/`** — a Next.js marketing/docs website, deployed to GitHub Pages.
+| Folder | Product | Stack |
+| --- | --- | --- |
+| `core/` | **Flagship** Windows desktop app: segmented HTTP(S) and BitTorrent | C++17, wxWidgets, libcurl, libtorrent-rasterbar 2.x, sqlite_orm, spdlog, nlohmann_json, vcpkg, CMake |
+| `android/` | Android app with its own native engine | Java UI + C++ JNI, static libcurl, Gradle 8.9, NDK 27 |
+| `browser/` | MV3 extensions (Chrome, Edge, Brave, Opera, Firefox, Safari) handing links to the app via `idr://` | Vanilla JS, no build step |
+| `site/` | Marketing/docs site on GitHub Pages | Next.js 16, React 19, Tailwind 4 |
 
-## Tech Stack
+Each component folder has its own `AGENTS.md`/`CLAUDE.md` with component rules.
 
-| Component | Stack |
-|---|---|
-| `core/` | C++17, CMake 3.20+, vcpkg. Libs: wxWidgets (GUI), libcurl (HTTP/HTTPS), libtorrent-rasterbar 2.x (BitTorrent), sqlite3 + sqlite_orm (persistence), nlohmann_json, fmt, spdlog. Windows-only. |
-| `android/` | Gradle 8.9 + AGP 8.2.2, Java (UI) + C++ via JNI/NDK/CMake (native engine, statically linking a vcpkg-cross-compiled libcurl+openssl+zlib). |
-| `browser/` | Vanilla JS, Manifest V3, no build step — one near-identical copy per browser under `browser/<browser>/`. |
-| `site/` | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4. Statically exported for GitHub Pages. |
+## Read before changing code
 
-## Directory Structure
+- [agents/PROJECT_SPEC.md](agents/PROJECT_SPEC.md): requirements and scope.
+- [agents/DESIGN.md](agents/DESIGN.md): architecture, threading, state machine, persistence.
+- [agents/CONVENTIONS.md](agents/CONVENTIONS.md): **hard invariants** and style.
+- [agents/WORKFLOWS.md](agents/WORKFLOWS.md): build, verify and release commands.
+- [agents/ROADMAP.md](agents/ROADMAP.md): known gaps.
 
-```
-core/
-  main.cpp           wxWidgets entry point: parses "idr://<url>" argv, single-instance guard, IPC server
-  src/gui/            MainWindow (wxFrame), tray icon
-  src/model/          sqlite_orm data model (DownloadModel / DownloadDB) — the real DB layer
-  src/service/download/   segmented HTTP engine (Download, DownloadManager) — uses network/ for transport,
-                           torrent/ for magnet/.torrent URLs
-  src/service/network/    real HttpClient/HttpRequest/HttpResponse wrapping libcurl (headers, cookies,
-                           proxy, TLS config, connection RAII wrapper)
-  src/service/torrent/    real libtorrent-backed engine: TorrentManager owns the one lt::session (pimpl'd
-                           behind manager.h so libtorrent headers don't leak into the rest of the codebase);
-                           TorrentMetaInfo parses magnets/.torrent files via libtorrent, not by hand
-  src/utils/system/ipc.h+.cpp   Win32 named-mutex single-instance guard + named-pipe IPC server, used to
-                           forward idr:// URLs from a second launch into the already-running instance
-  scripts/register_protocol.ps1   registers "idr://" in HKCU so browser extensions can reach the app
-  tests/              empty, not wired into CMake — no automated test suite exists
-android/
-  app/build.gradle    chainloads vcpkg's toolchain through the NDK's own (VCPKG_CHAINLOAD_TOOLCHAIN_FILE) so
-                       find_package(CURL) resolves; restricted to abiFilters "arm64-v8a" for now
-  vcpkg-triplets/arm64-android.cmake   overlay triplet targeting API 24 (matches minSdk) — the vcpkg
-                       community triplet targets API 28, which produces libc symbol mismatches at link time
-  app/src/main/cpp/native-lib.cpp   real libcurl-backed segmented downloader (HEAD probe, ranged GET
-                       workers, reassembly). Torrent/magnet on Android returns Status::Error — not implemented
-  app/src/main/java/.../MainActivity.java   reads magnet:/idr: intents (see AndroidManifest.xml's
-                       intent-filter) and calls nativeStartDownload automatically
-browser/<chrome|edge|brave|opera|firefox|safari>/
-  background.js       opens "idr://<percent-encoded-url>" in a short-lived background tab, which the OS
-                       hands to whatever registered the idr:// protocol (core/'s register_protocol.ps1)
-site/                Next.js site; site/AGENTS.md defers to site/AGENTS.md (auto-generated by `next dev`)
-docs/gui/             STALE — documents a C-based GUI that doesn't match the real C++/wxWidgets code
-plugins/              Empty placeholder directory
-```
+## Commands
 
-## Architecture
-
-- **GUI layer** (`src/gui/`): `MainWindow` polls `DownloadManager::GetDownloads()` on a `wxTimer` and renders live state; it does not run download logic itself. `AddDownloadFromExternal(url)` is the entry point used both by `main.cpp`'s own argv parsing and by IPC-forwarded URLs from a second process instance — it auto-picks a destination (no save dialog) since the caller (browser/OS) already decided the user wants this download.
-- **Download engine** (`src/service/download/`): `Download` HEAD-probes a URL via `network::HttpClient`; if the server advertises `Accept-Ranges: bytes` and the file is large enough, it splits into 4–8 parallel ranged-GET workers (`.partN` files, reassembled on completion), otherwise falls back to a single resumable stream. Magnet/`.torrent` URLs are detected in the constructor and delegate entirely to `idr::torrent::TorrentTask` (obtained from `TorrentManager`), which `Download` polls every 500ms via `TorrentTask::GetSnapshot()` to mirror progress into its own atomics — this is what the GUI actually reads.
-- **Network layer** (`src/service/network/`): `HttpClient::Head`/`Get` build on `CurlHandle` (RAII wrapper), `HttpRequest`/`HttpResponse` (plain data), `HttpHeaders` (case-insensitive), `ProxyConfig`/`TlsConfig`. This is the one real transport path — `download.cpp` never touches libcurl directly.
-- **Torrent layer** (`src/service/torrent/`): `TorrentManager` (singleton) owns the process's single `lt::session`, hidden behind a pimpl in `manager.h` so no other file needs to `#include <libtorrent/...>`. `TorrentTask::GetSnapshot()` is the only "live state" query — one `lt::torrent_handle::status()` call per snapshot, not per field. `AddTorrent(source, destinationDir, ...)` takes a **directory**: libtorrent lays out files using the torrent's own metadata, so the GUI uses `wxDirDialog` (not a save-as file dialog) for torrent/magnet adds.
-- **IPC / protocol handoff** (`src/utils/system/ipc.h`, `main.cpp`): `SingleInstanceGuard::AnotherInstanceIsRunning()` (named mutex) + a named-pipe server/client pair. A second launch with an `idr://<url>` argv either starts the first window (if none is running) or forwards the decoded URL over the pipe and exits (`OnInit` returns `false`). **`MyApp::OnInitCmdLine` must declare an optional positional `url` param** — without it, wxWidgets' default command-line parser rejects the unrecognized `idr://...` argument and aborts `OnInit()` before any custom logic runs (this was a real, verified bug during development; don't remove that override).
-
-## Data Flow
-
-1. GUI add, or a browser extension's `idr://` link, or a second-instance argv → `DownloadManager`/`TorrentManager` creates a task and persists it via `DownloadDB` (SQLite).
-2. HTTP: worker threads write into libcurl range/write callbacks → `.partN` files → reassembled. Torrent: libtorrent's own session threads do everything; `Download` just polls snapshots.
-3. `Download::NotifyStatusChanged()` fires only on Start/Pause/Resume/Stop/Complete (not continuously mid-transfer) and syncs that snapshot to SQLite; the GUI's live progress bar comes from polling the in-memory `Download` object directly, not the DB.
-
-## Database
-
-- SQLite via `sqlite_orm` exclusively (`idr::model::DownloadDB`, `src/model/sqlite_download_model.h`). Single `downloads` table; schema auto-migrates additively via `sync_schema()`.
-- `src/utils/database/database.h` is intentionally unused — don't confuse it with the real DB layer above.
-
-## Development Commands
-
-**core/ (Windows, requires `VCPKG_ROOT` set):**
 ```powershell
-cd core
-./scripts/build.ps1                 # loads vcvars64, configures + builds (manifest mode installs libtorrent/curl/etc. automatically)
-# manual equivalent:
-cmake -B out/build/x64-Debug -S . -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
-cmake --build out/build/x64-Debug
-```
-First configure after adding/upgrading a dependency (e.g. libtorrent) takes 10–20+ minutes to build boost/openssl/libtorrent from source — this is normal, not a hang.
-
-Register the protocol handler once per machine (no admin needed, writes HKCU only):
-```powershell
-./scripts/register_protocol.ps1
+cd core; ./scripts/build.ps1          # Windows desktop (finds vcpkg via VCPKG_ROOT, C:\vcpkg, or VS-bundled)
 ```
 
-**android/ (requires `VCPKG_ROOT`, `ANDROID_NDK_HOME` pointing at NDK 27.0.12077973, JDK ≤21 — Gradle 8.9 rejects JDK 24+):**
 ```bash
-# one-time: cross-compile curl for the arm64-v8a/API-24 overlay triplet
-vcpkg install curl:arm64-android --classic --overlay-triplets=android/vcpkg-triplets
-cd android
-./gradlew assembleDebug   # or assembleRelease
-```
-`android/local.properties` (`sdk.dir=...`, forward slashes) is required and gitignored/local — recreate it if missing on a fresh machine. `android/gradle.properties` is tracked in git and should be edited via PRs when project-wide Gradle settings change.
-
-**site/:**
-```bash
-cd site && npm ci && npm run build   # static export to site/out/
+cd android && ./gradlew assembleDebug  # needs NDK 27.0.12077973, JDK <= 21, local.properties
+cd site && npm ci && npm run lint && npm run build
+node --check browser/<browser>/background.js   # extensions have no build step
 ```
 
-## Testing
+## Verification is mandatory
 
-No automated test suite exists anywhere in the repo (`core/tests/*` dirs are empty and not wired into CMake). This was verified working end-to-end via manual runs during development (real HTTP download of a live URL completed and wrote real bytes to disk; the `idr://` → named-pipe → GUI → DB pipeline was confirmed by inspecting `downloads.db` after a forwarded launch) — if you touch this code, re-verify by actually building and running rather than assuming.
+There is no automated test suite, and a successful compile proves nothing about
+downloads. After touching `core/src/service/`, build and run the end-to-end check
+in [`core/tests/e2e/README.md`](core/tests/e2e/README.md), then compare SHA-256s. In
+your summary, say what you verified and what you didn't.
 
-## Important Constraints
+## Top invariants (full list in agents/CONVENTIONS.md)
 
-- **libtorrent headers must stay confined to `torrent_manager.cpp`/`torrent_metainfo.cpp`.** `manager.h` uses a pimpl specifically so `download.cpp`/GUI files don't pay libtorrent+boost's compile-time cost or need to link against it. Don't "simplify" this by exposing `lt::` types in the public header.
-- **libtorrent 2.x with `deprfun` disabled (our config) removes `torrent_info::files()`/`trackers()`.** Use `torrent_info::layout()` for the file list and `add_torrent_params::trackers` (from `lt::load_torrent_file()`/`lt::parse_magnet_uri()`) for trackers — not the deprecated ABI-1-only methods.
-- **Android's vcpkg triplet must stay at API 24** (`android/vcpkg-triplets/arm64-android.cmake`), matching `minSdk 24`. The stock community `arm64-android-release` triplet targets API 28 and links fine but fails at *runtime-equivalent link-time* with `undefined symbol: __sendto_chk` style fortify mismatches — this was hit and fixed during development.
-- **`MyApp::OnInitCmdLine` in `core/main.cpp` must keep declaring the optional `url` positional param.** Removing it silently breaks the entire `idr://` handoff (wx's parser aborts `OnInit()` before any custom code runs) with no compile error and a misleading "it just exits" symptom.
-- Windows-only for `core/` (`WIN32`-only libs linked unconditionally under `if(WIN32)`).
+1. libtorrent headers only in `core/src/service/torrent/torrent_{manager,metainfo}.cpp`
+   (the pimpl in `manager.h`). No hand-rolled BitTorrent or bencode code.
+2. All HTTP goes through `idr::network::HttpClient`. Never write a response byte
+   before it is validated (206 + exact `Content-Range` for ranges).
+3. `MyApp::OnInitCmdLine` in `core/main.cpp` must keep the optional `url` param, or
+   the `idr://` handoff silently breaks.
+4. Engine threads are owned and joined, never detached. Status callbacks must not
+   lock `DownloadManager::m_mutex`.
+5. Runtime data lives in `%APPDATA%\InternetDownloader\`, never in the CWD.
+6. The six `browser/*` copies must stay in sync (CI enforces this). Edit `chrome/` first.
+7. Android's vcpkg triplet stays at API 24. Android has no torrent support by design.
 
-## Things Codex Should NOT Change
+## Don't touch without asking
 
-- Don't reintroduce a hand-rolled BitTorrent/bencode parser — `TorrentMetaInfo`/`TorrentTask` are real libtorrent wrappers now; a previous version was a fake progress-bar simulation plus a broken hand-rolled SHA-1/bencode parser that never actually implemented BitTorrent. Keep using libtorrent's `parse_magnet_uri`/`load_torrent_file`.
-- Don't move the curl calls in `download.cpp` back to raw `curl_easy_*` calls — go through `idr::network::HttpClient`.
-- Don't delete `core/tests/*` empty directories or `plugins/` — reserved for future work.
-- `docs/gui/` is stale/aspirational (documents a C-based GUI that was never built); don't treat it as a spec, and don't silently rewrite it without asking the user what they want done with it.
-
-## Common Pitfalls
-
-- **Android has no BitTorrent support**: magnet/`.torrent` URLs on Android hit `Status::Error` deliberately (a real libtorrent+boost cross-compile for Android was out of scope this pass) — don't assume feature parity with desktop.
-- **Only `arm64-v8a` is built for Android.** Other ABIs need their own vcpkg triplet proven to cross-compile curl successfully before adding them to `abiFilters`.
-- **`android/local.properties` and `android/gradle.properties` are gitignored and machine-local** — a fresh checkout needs both recreated (`sdk.dir=<forward-slash path>`, `android.useAndroidX=true`) or Gradle fails with confusing errors (`Invalid file path`, AndroidX/Jetifier resolution errors) that look unrelated to their actual cause.
-- **Gradle 8.9 (and most cached Gradle versions) reject JDK 24/25.** Point `JAVA_HOME` at a JDK ≤21 when building Android locally.
-- **Browser extensions are six near-duplicate copies.** A behavior change (e.g. how `idr://` is dispatched) needs to be applied to all of `browser/{chrome,edge,brave,opera,firefox,safari}/background.js`.
-- **`core/src/utils/database/database.h`** is a deliberately-unused placeholder — the real DB logic is `src/model/sqlite_download_model.h`. Don't confuse the two.
+`docs/gui/` (stale C-GUI design, not a spec), `core/tests/*` and `plugins/` (reserved),
+`core/src/utils/database/database.h` (intentional placeholder), and `LICENSE` (non-commercial).

@@ -29,6 +29,10 @@ C:\Projects\1nternet-Downloader\
 
 ### Important
 
+> **Note:** `core/scripts/build.ps1` does not require vcpkg at `C:\vcpkg`. It uses
+> `VCPKG_ROOT` if set, then `C:\vcpkg`, then the vcpkg bundled with Visual Studio
+> (`<VS>\VC\vcpkg`). The layout below is the recommended setup.
+
 There is one global vcpkg installation:
 
 ``` text
