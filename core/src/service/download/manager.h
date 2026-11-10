@@ -38,14 +38,26 @@ public:
     // Database sync
     void SyncDownloadState(Download* dl);
 
+    // Starts Queued downloads (in list order) until the configured
+    // maxConcurrentDownloads are active. Called periodically by the GUI timer and
+    // after every add/resume, so finished downloads free their slot automatically.
+    void ProcessQueue();
+
+    std::shared_ptr<Download> FindDownload(int id);
+
 private:
     DownloadManager();
     ~DownloadManager();
 
     void LoadFromDatabase();
+    void ProcessQueueLocked();
+    void EnqueueLocked(const std::shared_ptr<Download>& dl);
 
     std::vector<std::shared_ptr<Download>> m_downloads;
     std::mutex m_mutex;
+    // sqlite_orm storage is used from the GUI thread and from download worker
+    // threads (status callbacks); serialize every access.
+    std::mutex m_dbMutex;
     std::unique_ptr<idr::model::DownloadDB> m_db;
 
     // Singleton semantics

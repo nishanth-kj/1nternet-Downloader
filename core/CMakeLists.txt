@@ -66,7 +66,7 @@ target_link_libraries(InternetDownloader PRIVATE
 
 # ── Windows-only ─────────────────────────────────────────────────
 if(WIN32)
-    target_link_libraries(InternetDownloader PRIVATE winhttp ws2_32 crypt32 bcrypt)
+    target_link_libraries(InternetDownloader PRIVATE winhttp ws2_32 crypt32 bcrypt shell32 ole32)
 endif()
 
 # ── compiler warnings ────────────────────────────────────────────

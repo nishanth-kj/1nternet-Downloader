@@ -51,6 +51,8 @@ private:
     void OnCtxRemove(wxCommandEvent& event);
     void OnCtxDeleteFile(wxCommandEvent& event);
     void OnCtxViewSegments(wxCommandEvent& event);
+    void OnCtxVerifyChecksum(wxCommandEvent& event);
+    void OnOptions(wxCommandEvent& event);
 
     // Browser / link grabber
     void OnBrowserGo(wxCommandEvent& event);
@@ -70,6 +72,8 @@ private:
     void SetupStatusBar();
 
     int GetSelectedDownloadId();
+    wxString DefaultDownloadDir() const;
+    bool m_verifying{false};
 
     // UI Elements
     wxSplitterWindow* m_vSplitter{nullptr};
@@ -119,6 +123,8 @@ enum
     ID_CtxRemove,
     ID_CtxDeleteFile,
     ID_CtxViewSegments,
+    ID_CtxVerifyChecksum,
+    ID_Options,
 
     // Browser
     ID_BrowserGo = 300,
