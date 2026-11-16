@@ -20,6 +20,12 @@ struct HttpRequest {
     bool headOnly{false};
     bool followRedirects{true};
     long timeoutSeconds{0}; // 0 = curl default (no timeout)
+    long connectTimeoutSeconds{30};
+    // Abort if fewer than 1 byte/s arrive for this many seconds (0 = disabled), so a
+    // stalled connection fails and can be retried instead of hanging forever.
+    long stallTimeoutSeconds{60};
+    // Receive-rate cap for this one connection in bytes/second (0 = unlimited).
+    int64_t maxRecvBytesPerSec{0};
 
     // Byte range, inclusive. rangeEnd < 0 means "to end of file". Both < 0 means no range.
     int64_t rangeStart{-1};

@@ -13,6 +13,11 @@ namespace network {
 // write-callback contract).
 using DataCallback = std::function<size_t(const char* data, size_t len)>;
 
+// Called once with the final response's status and headers, before the first body
+// byte reaches the DataCallback. Returning false aborts the transfer without writing
+// anything (e.g. a server that answered a Range request with a full 200 body).
+using ResponseValidator = std::function<bool(long statusCode, const HttpHeaders& headers)>;
+
 // Thin, real libcurl-backed HTTP/HTTPS client used by the download engine.
 class HttpClient {
 public:
@@ -21,7 +26,8 @@ public:
     static HttpResponse Head(const HttpRequest& req);
 
     // Issues a GET request (optionally with a byte range), streaming the body to onData.
-    static HttpResponse Get(const HttpRequest& req, const DataCallback& onData);
+    static HttpResponse Get(const HttpRequest& req, const DataCallback& onData,
+                            const ResponseValidator& validate = {});
 };
 
 } // namespace network
