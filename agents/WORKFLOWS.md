@@ -2,7 +2,7 @@
 
 ## Desktop (`core/`, Windows)
 
-Prerequisites: Visual Studio 2022+ with the C++ workload, CMake ≥ 3.20, and vcpkg.
+Prerequisites: Visual Studio 2022+ with the C++ workload, CMake ≥ 3.21, and vcpkg.
 `build.ps1` looks for vcpkg in `VCPKG_ROOT`, then `C:\vcpkg`, then the copy
 bundled with Visual Studio (`<VS>\VC\vcpkg`).
 
@@ -22,8 +22,8 @@ cd core
 ### Runtime files
 
 `%APPDATA%\InternetDownloader\` contains `downloads.db`, `settings.json` and
-`logs\idr.log`. Delete the folder to reset the app. The `downloads.db` at the repo
-root is a leftover from before this location was used, and the app ignores it.
+`logs\idr.log`. Delete the folder to reset the app. A `downloads.db` in the repo
+root is never used; it is gitignored and must not be committed.
 
 ### Verifying engine changes
 

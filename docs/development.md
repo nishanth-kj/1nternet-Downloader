@@ -50,7 +50,9 @@ From the repository root:
 .\core\scripts\build.ps1 -Clean
 ```
 
-The helper uses the same CMake presets as the commands above. It does not install Visual Studio or vcpkg for you.
+The helper uses the same CMake presets as the commands above. It finds vcpkg through `VCPKG_ROOT`, then `C:cpkg`, then the copy bundled with Visual Studio, and loads the MSVC environment, so it works from a plain PowerShell window. It does not install Visual Studio or vcpkg for you.
+
+New `.cpp` files under `core/src/` are picked up automatically. After changing the download engine, run the end-to-end check in [`core/tests/e2e/README.md`](../core/tests/e2e/README.md).
 
 ### Clean generated files
 
@@ -66,7 +68,7 @@ Do not delete the global vcpkg checkout when cleaning this project's build.
 
 ## Android application
 
-Android builds require JDK 17, Android SDK, NDK 27.0.12077973, CMake 3.22.1, and vcpkg.
+Android builds require JDK 17 or 21 (Gradle 8.9 rejects newer JDKs), Android SDK, NDK 27.0.12077973, CMake 3.22.1, and vcpkg.
 
 Set these environment variables:
 
@@ -122,5 +124,5 @@ For desktop handoff, first register the protocol from PowerShell:
 
 - **CMake cannot find vcpkg:** verify `VCPKG_ROOT` and that `$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake` exists.
 - **CMake cannot find a package:** remove `core/build/` and configure again. Confirm the dependency is declared in `core/vcpkg.json`.
-- **Android native build fails:** confirm JDK 17, NDK 27.0.12077973, CMake 3.22.1, and the Android vcpkg overlay triplet are being used.
+- **Android native build fails:** confirm JDK 17 or 21, NDK 27.0.12077973, CMake 3.22.1, and the Android vcpkg overlay triplet are being used.
 - **Browser handoff does nothing:** install the desktop application and register `idr://`; confirm the extension is enabled.
