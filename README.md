@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="site/public/logo.svg" alt="Internet Downloader logo" width="120" height="120">
+</p>
+
 # Internet Downloader
 
 A desktop-first download manager with companion Android and browser integrations.
