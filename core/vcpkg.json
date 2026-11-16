@@ -13,6 +13,7 @@
     "sqlite3",
     "sqlite-orm",
     "spdlog",
+    "nlohmann-json",
     {
       "name": "libtorrent",
       "default-features": false

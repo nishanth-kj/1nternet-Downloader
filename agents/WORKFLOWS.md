@@ -72,9 +72,11 @@ Read `node_modules/next/dist/docs/` before using Next.js APIs (see `site/AGENTS.
 
 | Workflow | Checks |
 | --- | --- |
-| `build-core.yml` | syntax and drift check for all six extensions; Windows Release build |
-| `build-android.yml` | cross-compiles curl and builds the APK |
-| `site-ci.yml` / `deploy-site.yml` | lint + build; deploy to GitHub Pages |
+| `build-core.yml` | syntax and drift check for all six extensions; Windows Release build (`core/`, `browser/`) |
+| `build-android.yml` | cross-compiles curl and builds the APK (`android/`) |
+| `site-ci.yml` / `deploy-site.yml` | lint + build; deploy to GitHub Pages (`site/`) |
+
+Each workflow uses path filters so site-only or Android-only PRs do not run the desktop or APK jobs.
 
 ## Release
 
