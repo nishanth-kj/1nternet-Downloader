@@ -191,7 +191,13 @@ public final class TorrentEngine {
         String token = magnet.substring(idx + 5);
         int amp = token.indexOf('&');
         if (amp >= 0) token = token.substring(0, amp);
-        if (token.length() == 40) return new Sha1Hash(token);
+        if (token.length() == 40) {
+            try {
+                return Sha1Hash.parseHex(token);
+            } catch (IllegalArgumentException e) {
+                return null;
+            }
+        }
         return null;
     }
 
