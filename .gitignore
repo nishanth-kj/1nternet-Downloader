@@ -1,64 +1,48 @@
-# Prerequisites
+# C/C++ build output
 *.d
-
-# Compiled Object files
 *.slo
 *.lo
 *.o
 *.obj
-
-# Precompiled Headers
 *.gch
 *.pch
-
-# Compiled Dynamic libraries
 *.so
 *.dylib
 *.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
 *.a
 *.lib
-
-# Executables
 *.exe
 *.out
 *.app
 
-# CMake / build output
+# CMake
 build/
 build-*/
 out/
 CMakeUserPresets.json
+compile_commands.json
 
-# IDE directories
-.vscode/
-.idea/
-*.swp
-
-# Visual Studio local state
-.vs/
-
-# Temporary / offline files
-/*.html
-*.tmp
-*.temp
-*.log
-
-# ── vcpkg ────────────────────────────────────────────────────────
+# vcpkg
 vcpkg_installed/
 vcpkg/
-!vcpkg.json          # manifest IS tracked
-!CMakePresets.json   # presets ARE tracked
+!vcpkg.json
+!CMakePresets.json
 
+# Local data and configuration
+/downloads.db
+*.db-shm
+*.db-wal
 .env
 !.env.example
+*.log
+*.tmp
+*.temp
+
+# IDE
+.vscode/
+.idea/
+.vs/
+*.swp
 
 # Android
 *.apk
@@ -66,7 +50,12 @@ vcpkg/
 .cxx/
 local.properties
 
-# Agent
-agent/
-.agent/Agent.md
-.agent/CLAUDE.md
+# Node / Next.js
+node_modules/
+.next/
+site/out/
+site/.next/
+
+# OS
+.DS_Store
+Thumbs.db

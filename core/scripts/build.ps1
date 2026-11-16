@@ -1,4 +1,5 @@
 param(
+    [ValidateSet("default", "release")]
     [string] $Preset = "default",
     [switch] $ConfigureOnly,
     [switch] $Clean
@@ -83,7 +84,7 @@ try {
 
     Write-Host "`n-- Build --" -ForegroundColor Cyan
 
-    cmake --build --preset $Preset
+    cmake --build --preset $Preset --parallel
 
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
