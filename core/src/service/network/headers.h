@@ -16,6 +16,7 @@ public:
     void AddFromRawLine(const std::string& line); // parses a single "Name: Value" line from curl's header callback
     std::string Get(const std::string& name) const;
     bool Has(const std::string& name) const;
+    void Clear() { m_entries.clear(); }
 
     const std::vector<std::pair<std::string, std::string>>& All() const { return m_entries; }
 

@@ -2,6 +2,9 @@
 #include "service/download/manager.h"
 #include "service/network/http.h"
 #include "service/network/request.h"
+#include "gui/settings_dialog.h"
+#include "utils/checksum.h"
+#include "utils/system/config.h"
 #include <wx/textdlg.h>
 #include <wx/msgdlg.h>
 #include <wx/filedlg.h>
@@ -76,6 +79,8 @@ wxBEGIN_EVENT_TABLE(MainWindow, wxFrame)
     EVT_MENU(ID_CtxRemove, MainWindow::OnCtxRemove)
     EVT_MENU(ID_CtxDeleteFile, MainWindow::OnCtxDeleteFile)
     EVT_MENU(ID_CtxViewSegments, MainWindow::OnCtxViewSegments)
+    EVT_MENU(ID_CtxVerifyChecksum, MainWindow::OnCtxVerifyChecksum)
+    EVT_MENU(ID_Options, MainWindow::OnOptions)
     EVT_MENU(ID_BrowserGo, MainWindow::OnBrowserGo)
     EVT_MENU(ID_BrowserBack, MainWindow::OnBrowserBack)
     EVT_MENU(ID_BrowserForward, MainWindow::OnBrowserForward)
@@ -193,6 +198,9 @@ void MainWindow::SetupMenuBar()
     menuDownloads->Append(ID_OpenDownloadFolder, "Open &Containing Folder");
     menuDownloads->Append(ID_CtxCopyUrl, "&Copy Download Link");
     menuDownloads->Append(ID_CtxViewSegments, "View &Connections (Segments)...");
+    menuDownloads->Append(ID_CtxVerifyChecksum, "&Verify SHA-256...");
+    menuDownloads->AppendSeparator();
+    menuDownloads->Append(ID_Options, "&Options...\tCtrl+,", "Download folder, connections, queue and speed limit");
 
     wxMenu *menuView = new wxMenu;
     menuView->Append(ID_OpenDownloadFolder, "&Open Downloads Folder\tCtrl+O", "Open default downloads directory");
@@ -260,7 +268,9 @@ void MainWindow::SetupActionPanel()
     wxStaticBoxSizer *box = new wxStaticBoxSizer(wxVERTICAL, m_actionPanel, "Tasks");
 
     auto addBtn = [&](int id, const wxString &label) {
-        wxButton *btn = new wxButton(m_actionPanel, id, label, wxDefaultPosition, wxDefaultSize, wxBU_LEFT);
+        // Controls inside a wxStaticBoxSizer must be children of its wxStaticBox.
+        // Button events still propagate up to the frame's event table.
+        wxButton *btn = new wxButton(box->GetStaticBox(), id, label, wxDefaultPosition, wxDefaultSize, wxBU_LEFT);
         box->Add(btn, 0, wxEXPAND | wxBOTTOM, 2);
     };
 
@@ -494,8 +504,11 @@ void MainWindow::RefreshList()
             statusStr = dl->IsTorrent() ? "Seeding" : "Completed";
             break;
         case idr::download::DownloadStatus::Error:
-            statusStr = "Error";
+        {
+            const std::string err = dl->GetErrorMessage();
+            statusStr = err.empty() ? "Error" : "Error: " + err;
             break;
+        }
         }
 
         std::string connInfo = dl->IsTorrent()
@@ -561,7 +574,7 @@ void MainWindow::OnAbout(wxCommandEvent &WXUNUSED(event))
 
 void MainWindow::OnAddDownload(wxCommandEvent &WXUNUSED(event))
 {
-    wxString defaultUrl = "https://speed.hetzner.de/100MB.bin";
+    wxString defaultUrl = "https://";
 
     if (wxTheClipboard->Open())
     {
@@ -583,15 +596,21 @@ void MainWindow::OnAddDownload(wxCommandEvent &WXUNUSED(event))
         return;
 
     wxString url = urlDlg.GetValue().Trim().Trim(false);
-    if (url.IsEmpty())
+    if (url.IsEmpty() || url == "https://" || url == "http://")
         return;
+    if (!(url.StartsWith("http://") || url.StartsWith("https://") || url.StartsWith("ftp://") ||
+          url.StartsWith("magnet:?")))
+    {
+        wxMessageBox("Only http://, https://, ftp:// and magnet: links are supported.",
+                     "Unsupported Link", wxOK | wxICON_WARNING, this);
+        return;
+    }
 
     if (url.StartsWith("magnet:?"))
     {
         // Torrents are saved into a chosen folder (libtorrent lays files out using the
         // torrent's own metadata), not to an exact file name like HTTP downloads.
-        wxDirDialog saveDlg(this, "Choose Folder To Save Torrent Payload",
-                            wxStandardPaths::Get().GetUserDir(wxStandardPaths::Dir_Downloads));
+        wxDirDialog saveDlg(this, "Choose Folder To Save Torrent Payload", DefaultDownloadDir());
         if (saveDlg.ShowModal() != wxID_OK)
             return;
 
@@ -611,7 +630,7 @@ void MainWindow::OnAddDownload(wxCommandEvent &WXUNUSED(event))
         suggestedName = "download.dat";
     }
 
-    wxFileDialog saveDlg(this, "Save File As", "", suggestedName,
+    wxFileDialog saveDlg(this, "Save File As", DefaultDownloadDir(), suggestedName,
                          "All Files (*.*)|*.*", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
     if (saveDlg.ShowModal() != wxID_OK)
         return;
@@ -634,8 +653,7 @@ void MainWindow::OnAddTorrent(wxCommandEvent &WXUNUSED(event))
 
     // Torrents are saved into a chosen folder (libtorrent lays files out using the
     // torrent's own metadata), not to an exact file name like HTTP downloads.
-    wxDirDialog saveDlg(this, "Choose Folder To Save Torrent Payload",
-                        wxStandardPaths::Get().GetUserDir(wxStandardPaths::Dir_Downloads));
+    wxDirDialog saveDlg(this, "Choose Folder To Save Torrent Payload", DefaultDownloadDir());
     if (saveDlg.ShowModal() != wxID_OK)
         return;
 
@@ -651,7 +669,7 @@ void MainWindow::AddDownloadFromExternal(const wxString &url)
     if (trimmed.IsEmpty())
         return;
 
-    wxString downloadsDir = wxStandardPaths::Get().GetUserDir(wxStandardPaths::Dir_Downloads);
+    wxString downloadsDir = DefaultDownloadDir();
     wxString destPath;
 
     if (trimmed.StartsWith("magnet:?") || trimmed.Lower().EndsWith(".torrent"))
@@ -672,12 +690,23 @@ void MainWindow::AddDownloadFromExternal(const wxString &url)
         destPath = downloadsDir + wxFileName::GetPathSeparator() + suggestedName;
     }
 
-    // Avoid clobbering an existing file of the same name.
+    // Avoid clobbering an existing file of the same name (or one that another
+    // download in the list is already writing to).
     wxFileName fn(destPath);
-    int counter = 1;
-    while (fn.FileExists())
+    const wxString baseName = fn.GetName();
+    auto inUse = [](const wxString &path)
     {
-        fn.SetName(wxString::Format("%s_%d", fn.GetName(), counter++));
+        for (const auto &dl : idr::download::DownloadManager::GetInstance().GetDownloads())
+        {
+            if (wxString(dl->GetDestination()).IsSameAs(path, false))
+                return true;
+        }
+        return false;
+    };
+    int counter = 1;
+    while (fn.FileExists() || inUse(fn.GetFullPath()))
+    {
+        fn.SetName(wxString::Format("%s_%d", baseName, counter++));
     }
 
     idr::download::DownloadManager::GetInstance().AddDownload(trimmed.ToStdString(), fn.GetFullPath().ToStdString(), true);
@@ -739,7 +768,102 @@ void MainWindow::OnOpenDownloadFolder(wxCommandEvent &WXUNUSED(event))
             }
         }
     }
-    wxLaunchDefaultApplication(wxGetCwd());
+    wxLaunchDefaultApplication(DefaultDownloadDir());
+}
+
+wxString MainWindow::DefaultDownloadDir() const
+{
+    wxString dir(idr::system::Config::Get().GetSettings().downloadDir);
+    if (dir.IsEmpty() || !wxDirExists(dir))
+        dir = wxStandardPaths::Get().GetUserDir(wxStandardPaths::Dir_Downloads);
+    return dir;
+}
+
+void MainWindow::OnOptions(wxCommandEvent &WXUNUSED(event))
+{
+    SettingsDialog dlg(this, idr::system::Config::Get().GetSettings());
+    if (dlg.ShowModal() != wxID_OK)
+        return;
+    if (!idr::system::Config::Get().SetSettings(dlg.GetSettings()))
+    {
+        wxMessageBox("Settings were applied but could not be saved to disk.",
+                     "Options", wxOK | wxICON_WARNING, this);
+    }
+    // A higher concurrency limit may free slots for queued downloads right away.
+    idr::download::DownloadManager::GetInstance().ProcessQueue();
+    RefreshList();
+}
+
+void MainWindow::OnCtxVerifyChecksum(wxCommandEvent &WXUNUSED(event))
+{
+    auto dl = idr::download::DownloadManager::GetInstance().FindDownload(GetSelectedDownloadId());
+    if (!dl)
+    {
+        wxMessageBox("Please select a download first.", "Verify SHA-256", wxOK | wxICON_INFORMATION, this);
+        return;
+    }
+    if (dl->IsTorrent() || dl->GetStatus() != idr::download::DownloadStatus::Completed)
+    {
+        wxMessageBox("SHA-256 verification is available for completed HTTP downloads.",
+                     "Verify SHA-256", wxOK | wxICON_INFORMATION, this);
+        return;
+    }
+    if (m_verifying)
+    {
+        wxMessageBox("A checksum is already being computed.", "Verify SHA-256", wxOK | wxICON_INFORMATION, this);
+        return;
+    }
+
+    wxTextEntryDialog expectedDlg(this,
+        "Paste the expected SHA-256 from the publisher (optional).\nLeave empty to just compute it:",
+        "Verify SHA-256");
+    if (expectedDlg.ShowModal() != wxID_OK)
+        return;
+    const std::string expected = idr::utils::NormalizeHexDigest(expectedDlg.GetValue().ToStdString());
+    const std::string path = dl->GetDestination();
+    const wxString fileName = wxString::FromUTF8(dl->GetFilename());
+
+    m_verifying = true;
+    SetStatusText("Computing SHA-256 of " + fileName + "...", 0);
+
+    auto alive = m_alive;
+    std::thread([this, alive, path, expected, fileName]()
+                {
+        std::string error;
+        const std::string actual = idr::utils::Sha256File(path, &error);
+        wxTheApp->CallAfter([this, alive, actual, expected, error, fileName]()
+                            {
+            if (!alive->load())
+                return;
+            m_verifying = false;
+            if (actual.empty())
+            {
+                wxMessageBox("Could not hash " + fileName + ": " + wxString(error),
+                             "Verify SHA-256", wxOK | wxICON_ERROR, this);
+                return;
+            }
+            if (wxTheClipboard->Open())
+            {
+                wxTheClipboard->SetData(new wxTextDataObject(actual));
+                wxTheClipboard->Close();
+            }
+            wxString msg = fileName + "\n\nSHA-256:\n" + actual + "\n(copied to clipboard)";
+            if (expected.empty())
+            {
+                wxMessageBox(msg, "Verify SHA-256", wxOK | wxICON_INFORMATION, this);
+            }
+            else if (expected == actual)
+            {
+                wxMessageBox(msg + "\n\nMATCH: the file is identical to what the publisher hashed.",
+                             "Verify SHA-256", wxOK | wxICON_INFORMATION, this);
+            }
+            else
+            {
+                wxMessageBox(msg + "\n\nExpected:\n" + wxString(expected) +
+                                 "\n\nMISMATCH: the file is corrupt or not the one the publisher hashed.",
+                             "Verify SHA-256", wxOK | wxICON_ERROR, this);
+            } }); })
+        .detach();
 }
 
 void MainWindow::OnSidebarSelected(wxCommandEvent &event)
@@ -770,7 +894,7 @@ void MainWindow::OnListRightClick(wxListEvent &event)
     wxMenu menu;
     auto status = targetDl->GetStatus();
 
-    if (status == idr::download::DownloadStatus::Downloading)
+    if (status == idr::download::DownloadStatus::Downloading || status == idr::download::DownloadStatus::Queued)
     {
         menu.Append(ID_CtxPause, "&Pause");
     }
@@ -785,6 +909,8 @@ void MainWindow::OnListRightClick(wxListEvent &event)
     if (status == idr::download::DownloadStatus::Completed)
     {
         menu.Append(ID_CtxOpenFile, "&Open File");
+        if (!targetDl->IsTorrent())
+            menu.Append(ID_CtxVerifyChecksum, "&Verify SHA-256...");
     }
     menu.Append(ID_CtxOpenFolder, "Open &Containing Folder");
     menu.Append(ID_CtxCopyUrl, "&Copy Download Link");
@@ -810,13 +936,14 @@ void MainWindow::OnListDoubleClick(wxListEvent &event)
             {
                 wxLaunchDefaultApplication(dl->GetDestination());
             }
-            else if (dl->GetStatus() == idr::download::DownloadStatus::Downloading)
+            else if (dl->GetStatus() == idr::download::DownloadStatus::Downloading ||
+                     dl->GetStatus() == idr::download::DownloadStatus::Queued)
             {
-                dl->Pause();
+                idr::download::DownloadManager::GetInstance().PauseDownload(id);
             }
             else
             {
-                dl->Resume();
+                idr::download::DownloadManager::GetInstance().ResumeDownload(id);
             }
             RefreshList();
             break;
@@ -961,6 +1088,8 @@ void MainWindow::OnCtxViewSegments(wxCommandEvent &WXUNUSED(event))
 
 void MainWindow::OnTimer(wxTimerEvent &WXUNUSED(event))
 {
+    // Finished/failed downloads free their slot; start the next queued ones.
+    idr::download::DownloadManager::GetInstance().ProcessQueue();
     RefreshList();
 }
 

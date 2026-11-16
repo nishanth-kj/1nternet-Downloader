@@ -12,11 +12,19 @@ $ScriptDir = $PSScriptRoot
 $CoreDir = Split-Path $ScriptDir -Parent
 $EnvFile = Join-Path $CoreDir ".env"
 
-# Global vcpkg
-$VcpkgRoot = "C:\vcpkg"
+# Locate vcpkg: $env:VCPKG_ROOT, then C:\vcpkg, then the copy bundled with Visual Studio.
+$vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+$candidates = @()
+if ($env:VCPKG_ROOT) { $candidates += $env:VCPKG_ROOT }
+$candidates += "C:\vcpkg"
+if (Test-Path $vswhere) {
+    $vsInstall = & $vswhere -latest -products * -property installationPath
+    if ($vsInstall) { $candidates += (Join-Path $vsInstall "VC\vcpkg") }
+}
 
-if (-not (Test-Path (Join-Path $VcpkgRoot "vcpkg.exe"))) {
-    Write-Error "vcpkg not found at $VcpkgRoot"
+$VcpkgRoot = $candidates | Where-Object { Test-Path (Join-Path $_ "vcpkg.exe") } | Select-Object -First 1
+if (-not $VcpkgRoot) {
+    Write-Error "vcpkg not found. Set VCPKG_ROOT or install vcpkg (searched: $($candidates -join ', '))"
     exit 1
 }
 

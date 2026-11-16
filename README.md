@@ -1,15 +1,18 @@
 # Internet Downloader
 
-A desktop-first download manager with a native C++/wxWidgets application, an Android client, a Chrome-compatible browser extension, and a Next.js project website.
+A desktop-first download manager with a native C++/wxWidgets application, an Android client, browser extensions for Chrome, Edge, Brave, Opera, Firefox and Safari, and a Next.js project website.
 
 > **Project status:** active development. Builds and feature coverage vary by platform. Review the platform limitations and release notes before relying on this application for important downloads.
 
 ## Current capabilities
 
 - HTTP/HTTPS downloads through libcurl.
-- Pause, resume, cancel, and download queue management in the desktop application.
-- Parallel byte-range downloads when the server advertises range support.
-- SQLite-backed desktop download metadata.
+- Pause, resume, restart and cancel, with a download queue that limits simultaneous downloads (configurable).
+- Parallel byte-range downloads when the server advertises range support, with live per-connection progress and speed.
+- Automatic retries with backoff that resume from the bytes already on disk. A server that ignores ranges falls back to a single stream.
+- Strict integrity checks: response ranges are validated before any byte is written, and final sizes are verified. Built-in SHA-256 verification.
+- Options for the download folder, connections per download, retries and a per-download speed limit.
+- SQLite-backed download history and JSON settings in `%APPDATA%\InternetDownloader`, plus a rotating log file.
 - BitTorrent integration in the desktop build through libtorrent.
 - Android native download engine using JNI and libcurl.
 - Browser-to-desktop handoff through the registered `idr://` protocol.
@@ -21,7 +24,7 @@ A desktop-first download manager with a native C++/wxWidgets application, an And
 | --- | --- | --- |
 | Desktop | C++17, wxWidgets, libcurl, SQLite, libtorrent | Validate behavior on the target Windows version before production use. |
 | Android | Java/Kotlin application layer with C++/JNI native downloader | Current native build targets `arm64-v8a`; torrent/magnet downloads are not supported in the Android native engine. |
-| Browser extension | Manifest V3 extension for Chrome-compatible browsers | Desktop handoff requires the desktop app and the `idr://` protocol registration. Automatic interception is off by default. |
+| Browser extensions | Manifest V3 extensions for Chrome, Edge, Brave, Opera, Firefox and Safari | Desktop handoff requires the desktop app and the `idr://` protocol registration. Automatic interception is off by default. |
 | Website | Next.js static export | The website's Releases link points to GitHub Releases; installable artifacts must actually be published there. |
 
 This repository uses a custom **non-commercial license**. It is not licensed under an OSI-approved open-source license. Read [LICENSE](LICENSE) before redistributing or using the project commercially.
@@ -30,7 +33,8 @@ This repository uses a custom **non-commercial license**. It is not licensed und
 
 - `core/` — desktop application, download engine, network layer, persistence, torrent integration, and build scripts.
 - `android/` — Android application and native JNI/libcurl downloader.
-- `browser/chrome/` — browser extension and desktop protocol handoff.
+- `browser/<browser>/` — browser extensions (six synced copies) and desktop protocol handoff.
+- `agents/` — project spec, design, conventions, workflows and roadmap (for contributors and AI coding agents; see also `AGENTS.md`).
 - `site/` — Next.js website configured for static GitHub Pages export.
 - `.github/workflows/` — platform build and website CI workflows.
 - `docs/DOWNLOAD_CORRECTNESS_CHECKLIST.md` — manual and release acceptance checklist.
@@ -43,7 +47,7 @@ This repository uses a custom **non-commercial license**. It is not licensed und
 - Windows with Visual Studio C++ build tools and Windows SDK.
 - CMake 3.20 or newer.
 - Git.
-- vcpkg with `VCPKG_ROOT` set to the vcpkg checkout path.
+- vcpkg. `build.ps1` uses `VCPKG_ROOT`, then `C:\vcpkg`, then the copy bundled with Visual Studio.
 
 ### Build
 
