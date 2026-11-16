@@ -37,6 +37,7 @@ find_package(SqliteOrm CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(Boost CONFIG REQUIRED)
 find_package(LibtorrentRasterbar CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 
 set(CORE_SRCS
     main.cpp
@@ -101,6 +102,7 @@ target_link_libraries(InternetDownloader PRIVATE
     sqlite_orm::sqlite_orm
     spdlog::spdlog
     LibtorrentRasterbar::torrent-rasterbar
+    nlohmann_json::nlohmann_json
 )
 
 if(WIN32)
