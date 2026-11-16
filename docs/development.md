@@ -12,7 +12,7 @@ This guide covers the supported local build paths. Use the commands from the rep
 - Git
 - vcpkg
 
-Install vcpkg from https://github.com/microsoft/vcpkg and set `VCPKG_ROOT` to the vcpkg checkout directory. For example, in PowerShell:
+Install vcpkg from <https://github.com/microsoft/vcpkg> and set `VCPKG_ROOT` to the vcpkg checkout directory. For example, in PowerShell:
 
 ```powershell
 $env:VCPKG_ROOT = "C:\\tools\\vcpkg"
@@ -50,7 +50,7 @@ From the repository root:
 .\core\scripts\build.ps1 -Clean
 ```
 
-The helper uses the same CMake presets as the commands above. It finds vcpkg through `VCPKG_ROOT`, then `C:cpkg`, then the copy bundled with Visual Studio, and loads the MSVC environment, so it works from a plain PowerShell window. It does not install Visual Studio or vcpkg for you.
+The helper uses the same CMake presets as the commands above. It finds vcpkg through `VCPKG_ROOT`, then `C:\vcpkg`, then the copy bundled with Visual Studio, and loads the MSVC environment, so it works from a plain PowerShell window. It does not install Visual Studio or vcpkg for you.
 
 New `.cpp` files under `core/src/` are picked up automatically. After changing the download engine, run the end-to-end check in [`core/tests/e2e/README.md`](../core/tests/e2e/README.md).
 

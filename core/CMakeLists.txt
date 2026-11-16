@@ -1,3 +1,8 @@
+# libtorrent's package config calls find_package(Boost). CMake 3.30+ removed the
+# FindBoost module (CMP0167) and warns unless the policy is set; NEW makes it use
+# the BoostConfig.cmake that vcpkg installs. A policy default only takes effect
+# when it is set before cmake_minimum_required().
+set(CMAKE_POLICY_DEFAULT_CMP0167 NEW)
 cmake_minimum_required(VERSION 3.21)
 
 project(InternetDownloader VERSION 1.0.0 LANGUAGES CXX)
