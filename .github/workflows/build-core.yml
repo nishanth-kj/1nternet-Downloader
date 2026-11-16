@@ -1,4 +1,4 @@
-name: Build & Release Core App
+name: Build Windows App
 
 on:
   push:
@@ -16,12 +16,10 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
-      - name: Validate browser extension JavaScript
+      - name: Validate browser extensions
         shell: bash
         run: |
           for b in chrome edge brave opera firefox safari; do
@@ -41,21 +39,17 @@ jobs:
           vcpkgDirectory: ${{ runner.workspace }}/vcpkg
           vcpkgGitCommitId: 94a541197763a4f449a1b91478df48c0584a6256
 
-      - name: Configure CMake
+      - name: Configure
         run: |
-          cmake -S core -B core/build `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_TOOLCHAIN_FILE="${{ runner.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+          cmake -S core -B core/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="${{ runner.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
 
-      - name: Build Application
-        run: |
-          cmake --build core/build --config Release --parallel
+      - name: Build
+        run: cmake --build core/build --config Release --parallel
 
-      - name: Upload Windows Executable
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: InternetDownloader-Windows-x64
           path: |
             core/build/Release/InternetDownloader.exe
             core/build/Release/*.dll
-

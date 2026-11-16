@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Instructions for AI coding agents working in this repository. This is the canonical
-cross-tool file. `CLAUDE.md` imports it. Detailed docs live in [`agents/`](agents/README.md).
+cross-tool file, and the only one: there is no `CLAUDE.md`. Detailed docs live in [`agents/`](agents/README.md).
 
 ## What this is
 
@@ -15,7 +15,7 @@ independently built products:
 | `browser/` | MV3 extensions (Chrome, Edge, Brave, Opera, Firefox, Safari) handing links to the app via `idr://` | Vanilla JS, no build step |
 | `site/` | Marketing/docs site on GitHub Pages | Next.js 16, React 19, Tailwind 4 |
 
-Each component folder has its own `AGENTS.md`/`CLAUDE.md` with component rules.
+Each component folder has its own `AGENTS.md` with component rules.
 
 ## Read before changing code
 
@@ -60,5 +60,15 @@ your summary, say what you verified and what you didn't.
 
 ## Don't touch without asking
 
-`docs/gui/` (stale C-GUI design, not a spec), `core/tests/*` and `plugins/` (reserved),
+`core/tests/*` and `plugins/` (reserved),
 `core/src/utils/database/database.h` (intentional placeholder), and `LICENSE` (non-commercial).
+
+## Local run notes
+
+- Use PowerShell for `core/scripts/*.ps1`. In Git Bash, use `cygpath -w` when you hand
+  paths to Windows programs.
+- Before running the desktop app for verification, point `downloadDir` in
+  `%APPDATA%\InternetDownloader\settings.json` at a scratch folder. Write that JSON
+  with Node rather than hand-escaping backslashes. Afterwards kill the app
+  (`taskkill //IM InternetDownloader.exe //F`) and delete the test data.
+- The repository root must stay free of runtime data such as `downloads.db`.
