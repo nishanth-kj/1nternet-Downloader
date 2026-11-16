@@ -3,8 +3,8 @@
   "configurePresets": [
     {
       "name": "default",
-      "displayName": "Default Config",
-      "description": "Default build using global vcpkg",
+      "displayName": "Debug",
+      "description": "Configure the Windows desktop application with vcpkg",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
@@ -14,7 +14,7 @@
     },
     {
       "name": "release",
-      "displayName": "Release Config",
+      "displayName": "Release",
       "inherits": "default",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
@@ -24,11 +24,13 @@
   "buildPresets": [
     {
       "name": "default",
-      "configurePreset": "default"
+      "configurePreset": "default",
+      "configuration": "Debug"
     },
     {
       "name": "release",
-      "configurePreset": "release"
+      "configurePreset": "release",
+      "configuration": "Release"
     }
   ]
 }

@@ -1,4 +1,5 @@
 param(
+    [ValidateSet("default", "release")]
     [string] $Preset = "default",
     [switch] $ConfigureOnly,
     [switch] $Clean
@@ -10,7 +11,6 @@ $ErrorActionPreference = "Stop"
 # Paths
 $ScriptDir = $PSScriptRoot
 $CoreDir = Split-Path $ScriptDir -Parent
-$EnvFile = Join-Path $CoreDir ".env"
 
 # Locate vcpkg: $env:VCPKG_ROOT, then C:\vcpkg, then the copy bundled with Visual Studio.
 $vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -45,7 +45,7 @@ if (Test-Path $vswhere) {
         if (Test-Path $vcvars) {
             Write-Host "Loading MSVC Environment..." -ForegroundColor Cyan
 
-            cmd.exe /c "`"$vcvars`" >NUL && set" | ForEach-Object {
+            cmd.exe /c "`"$vcvars`" >NUL 2>&1 && set" | ForEach-Object {
                 if ($_ -match "^([^=]+)=(.*)$") {
                     [Environment]::SetEnvironmentVariable($matches[1], $matches[2], "Process")
                 }
@@ -83,7 +83,7 @@ try {
 
     Write-Host "`n-- Build --" -ForegroundColor Cyan
 
-    cmake --build --preset $Preset
+    cmake --build --preset $Preset --parallel
 
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE

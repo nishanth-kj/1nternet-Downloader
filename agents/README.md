@@ -2,8 +2,8 @@
 
 Read these documents before you change the code. They are written for AI coding agents
 (Claude Code, Codex, Cursor, …) and for human contributors who are new to the code.
-The root `AGENTS.md` and `CLAUDE.md` files stay short and link here, so these
-documents only use context when they are relevant.
+The root `AGENTS.md` stays short and links here, so these documents only use
+context when they are relevant.
 
 | File | Read it when you… |
 | --- | --- |
@@ -17,15 +17,12 @@ documents only use context when they are relevant.
 
 ```text
 AGENTS.md              canonical cross-tool instructions (short; links into agents/)
-CLAUDE.md              @AGENTS.md + Claude Code specifics
 <component>/AGENTS.md  component rules, loaded only when an agent works in that folder
-<component>/CLAUDE.md  @AGENTS.md (same content for Claude Code)
 agents/*.md            this directory: spec, design, conventions, workflows, roadmap
-docs/                  user and release docs (install guide, correctness checklist)
+docs/                  user and release docs (architecture, setup, platforms, releases, checklist)
 ```
 
-Claude Code reads `CLAUDE.md` (which imports `AGENTS.md`). Other agents read
-`AGENTS.md` directly. Nested files in `core/`, `android/`, `browser/` and `site/`
+`AGENTS.md` is the only instruction file; the repository has no `CLAUDE.md`. Nested files in `core/`, `android/`, `browser/` and `site/`
 load only when an agent opens files in that folder. Keep each instruction file
 under ~200 lines, and put long material in this directory.
 
@@ -33,5 +30,3 @@ under ~200 lines, and put long material in this directory.
 
 - Update the matching document in the same change as the code it describes.
 - If a document contradicts the code, trust the code, then fix the document.
-- Claude Code users can run `/doctor prompt-audit` to find instructions that are stale
-  or contradict each other.

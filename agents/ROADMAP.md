@@ -34,8 +34,3 @@ Ordered roughly by user impact. Each item names where the work happens.
 - Handoff confirmation: the app could acknowledge receipt (e.g. through a
   localhost endpoint), so auto-capture could cancel the browser download safely.
 - Replace the six copies with one source plus a small packaging script.
-
-## Docs
-
-- `docs/gui/` is stale (a C GUI that was never built). The owner should decide
-  whether to delete it or archive it.

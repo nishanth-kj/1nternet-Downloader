@@ -27,11 +27,21 @@ This checklist defines the minimum acceptance bar for a release. A successful co
 - [ ] A failed assembly does not publish a partial destination as complete.
 - [ ] Temporary and segment files are cleaned up only when it is safe to do so.
 
+## Android
+
+- [ ] A server that ignores Range is not marked as a successful segmented download.
+- [ ] Every segment receives HTTP 206 and a matching Content-Range before assembly.
+- [ ] The assembled file length matches the probed content length.
+- [ ] Resume writes to a temporary remainder file and appends only after a valid 206 response.
+- [ ] Filenames, URLs, and destination paths containing quotes, backslashes, or control characters produce valid JSON.
+- [ ] Pause/resume and cancel are exercised on a physical device; incomplete segments are not treated as completed.
+
 ## Browser integration
 
 - [ ] Automatic interception is disabled by default and must be explicitly enabled.
-- [ ] A failed custom-protocol handoff does not silently discard the original browser download.
-- [ ] Unsupported URL schemes are rejected in the extension popup.
+- [ ] A failed custom-protocol dispatch leaves the browser's original download running.
+- [ ] Unsupported URL schemes are rejected by both popup and background worker.
+- [ ] The extension uses only the permissions required for its features.
 - [ ] The extension displays a handoff request, not a claim that the desktop app accepted the download.
 
 ## Release gate
