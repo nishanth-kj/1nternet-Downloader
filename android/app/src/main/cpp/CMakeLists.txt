@@ -22,3 +22,7 @@ target_link_libraries(
         internetdownloader
         CURL::libcurl
         ${log-lib})
+
+# Single translation unit; keep Release compact without changing the public ABI.
+target_compile_options(internetdownloader PRIVATE
+        $<$<CONFIG:Release>:-O2 -fvisibility=hidden>)

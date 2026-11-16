@@ -1,12 +1,14 @@
 #pragma once
 
 #include "service/download/download.h"
-#include "model/sqlite_download_model.h"
 #include <vector>
 #include <memory>
 #include <mutex>
 
 namespace idr {
+namespace model {
+class DownloadDB;
+}
 namespace download {
 
 class DownloadManager {

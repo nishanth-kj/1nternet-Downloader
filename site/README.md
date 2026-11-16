@@ -1,6 +1,6 @@
 # Project website
 
-This directory contains the Internet Downloader static website.
+This directory contains the 1nternet Downloader static website.
 
 ## Development
 

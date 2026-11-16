@@ -5,7 +5,7 @@ cross-tool file, and the only one: there is no `CLAUDE.md`. Detailed docs live i
 
 ## What this is
 
-Internet Downloader ("IDR") is a download manager. The monorepo contains four
+1nternet Downloader ("1IDM") is a download manager. The monorepo contains four
 independently built products:
 
 | Folder | Product | Stack |

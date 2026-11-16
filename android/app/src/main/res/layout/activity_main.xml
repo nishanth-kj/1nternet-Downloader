@@ -21,11 +21,20 @@
             android:orientation="horizontal"
             android:paddingHorizontal="12dp">
 
+            <ImageView
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginEnd="8dp"
+                android:adjustViewBounds="true"
+                android:background="@android:color/transparent"
+                android:contentDescription="@string/app_name"
+                android:src="@drawable/logo" />
+
             <TextView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Internet Downloader"
+                android:text="1nternet Downloader"
                 android:textColor="@color/classic_white"
                 android:textSize="17sp"
                 android:textStyle="bold" />

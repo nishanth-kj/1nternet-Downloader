@@ -1,30 +1,36 @@
 import Link from "next/link";
-import { FiDownload } from "react-icons/fi";
+
+import { Logo } from "./logo";
+
+const repositoryUrl = "https://github.com/nishanth-kj/1nternet-Downloader";
 
 export function DownloadSection() {
   return (
     <section id="download" className="py-24 text-center">
       <div className="container mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-        <h2 className="text-3xl font-bold tracking-tight mb-4">Download Internet-Downloader</h2>
-        <p className="text-lg text-muted-foreground mb-8">
-          Get the latest version of Internet-Downloader for your desktop.
+        <Logo size={72} className="mx-auto mb-6" />
+        <h2 className="text-3xl font-bold tracking-tight mb-4">Download with 1IDM</h2>
+        <p className="text-lg text-muted-foreground mb-10">
+          Same mark on Windows, Android, and the browser extension.
         </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link
-            href="https://github.com/nishanth-kj/1nternet-Downloader/releases"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex w-full sm:w-auto items-center justify-center rounded-md bg-primary px-8 py-3 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <FiDownload className="mr-2 h-4 w-4" /> View releases
-          </Link>
-          <Link 
-            href="https://github.com/nishanth-kj/1nternet-Downloader/releases"
-            target="_blank"
-            className="inline-flex w-full sm:w-auto items-center justify-center rounded-md border border-input bg-background px-8 py-3 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            View Releases
-          </Link>
+        <div className="grid gap-4 sm:grid-cols-3">
+          {[
+            { title: "Windows", href: `${repositoryUrl}/releases`, label: "Desktop app" },
+            { title: "Android", href: `${repositoryUrl}/releases`, label: "APK" },
+            { title: "Browser", href: `${repositoryUrl}/tree/main/browser/chrome`, label: "Download with browser" },
+          ].map((item) => (
+            <Link
+              key={item.title}
+              href={item.href}
+              target="_blank"
+              rel="noreferrer"
+              className="flex flex-col items-center gap-3 rounded-xl border bg-card p-6 shadow-sm transition-colors hover:bg-accent"
+            >
+              <Logo size={48} />
+              <span className="font-semibold">{item.title}</span>
+              <span className="text-sm text-muted-foreground">{item.label}</span>
+            </Link>
+          ))}
         </div>
       </div>
     </section>

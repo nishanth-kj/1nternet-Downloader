@@ -1,6 +1,6 @@
 # Architecture
 
-Internet Downloader is a small multi-platform repository. Each client has its own entry point; the desktop and Android applications use separate native download engines.
+1nternet Downloader is a small multi-platform repository. Each client has its own entry point; the desktop and Android applications use separate native download engines.
 
 ## Components
 

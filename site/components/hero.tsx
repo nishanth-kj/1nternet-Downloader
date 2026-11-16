@@ -1,12 +1,14 @@
 import Link from "next/link";
-import { FiDownload } from "react-icons/fi";
 import { FaGithub } from "react-icons/fa";
+
+import { Logo } from "./logo";
 
 export function Hero() {
   return (
     <section className="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-20 md:py-32 flex flex-col items-center text-center">
+      <Logo size={96} className="mb-8" />
       <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6">
-        Internet-Downloader
+        1IDM
       </h1>
       <p className="text-xl md:text-2xl text-muted-foreground font-medium mb-4 max-w-2xl">
         A fast and simple download manager for your desktop.
@@ -21,7 +23,7 @@ export function Hero() {
           rel="noreferrer"
           className="inline-flex items-center justify-center rounded-md bg-primary px-8 py-3 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <FiDownload className="mr-2 h-4 w-4" /> View releases
+          <Logo size={18} className="mr-2" /> Download
         </Link>
         <Link 
           href="https://github.com/nishanth-kj/1nternet-Downloader"

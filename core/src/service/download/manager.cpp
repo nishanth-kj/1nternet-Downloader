@@ -1,4 +1,5 @@
 #include "service/download/manager.h"
+#include "model/sqlite_download_model.h"
 #include "utils/system/config.h"
 #include "utils/system/logger.h"
 #include "utils/system/platform.h"
@@ -6,6 +7,10 @@
 #include <chrono>
 #include <curl/curl.h>
 #include <filesystem>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace idr {
 namespace download {
@@ -15,17 +20,35 @@ int64_t NowSeconds() {
     return std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
 }
+
+std::string DefaultDatabasePath() {
+    const std::filesystem::path dbName("downloads.db");
+#ifdef _WIN32
+    wchar_t modulePath[MAX_PATH]{};
+    if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0) {
+        std::filesystem::path dir = std::filesystem::path(modulePath).parent_path();
+        for (int i = 0; i < 6 && !dir.empty(); ++i) {
+            if (std::filesystem::exists(dir / "vcpkg.json") ||
+                std::filesystem::exists(dir / "CMakeLists.txt")) {
+                return (dir / dbName).string();
+            }
+            dir = dir.parent_path();
+        }
+        return (std::filesystem::path(modulePath).parent_path() / dbName).string();
+    }
+#endif
+    return dbName.string();
+}
 } // namespace
 
 DownloadManager::DownloadManager() {
     curl_global_init(CURL_GLOBAL_ALL);
-    // Keep the database in the per-user app-data folder, not the working directory:
-    // an idr:// launch inherits the browser's CWD. sqlite expects a UTF-8 path.
-    const auto dbPath = idr::system::AppDataDir() / "downloads.db";
     try {
+        const auto dbPath = idr::system::AppDataDir() / "downloads.db";
         m_db = std::make_unique<idr::model::DownloadDB>(dbPath.u8string());
     } catch (const std::exception& e) {
-        idr::system::Log()->error("cannot open database {}: {}", dbPath.string(), e.what());
+        idr::system::Log()->error("cannot open app-data database: {}", e.what());
+        m_db = std::make_unique<idr::model::DownloadDB>(DefaultDatabasePath());
     }
     LoadFromDatabase();
 }

@@ -28,8 +28,8 @@ vcpkg/
 !vcpkg.json
 !CMakePresets.json
 
-# Local data and configuration
-/downloads.db
+# Local data
+downloads.db
 *.db-shm
 *.db-wal
 .env
@@ -37,12 +37,16 @@ vcpkg/
 *.log
 *.tmp
 *.temp
+/*.html
 
 # IDE
 .vscode/
 .idea/
 .vs/
 *.swp
+agent/
+.agent/Agent.md
+.agent/CLAUDE.md
 
 # Android
 *.apk

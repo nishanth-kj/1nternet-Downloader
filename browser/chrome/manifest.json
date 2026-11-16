@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Internet Downloader Integration",
+  "name": "1nternet Downloader Integration",
   "version": "1.0.0",
-  "description": "Seamlessly integrate your browser with Internet Downloader for fast, multi-threaded downloading.",
+  "description": "Seamlessly integrate your browser with 1nternet Downloader for fast, multi-threaded downloading.",
   "permissions": [
     "contextMenus",
     "downloads",
@@ -16,7 +16,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Internet Downloader"
+    "default_title": "1nternet Downloader"
   },
   "icons": {
     "16": "icons/icon16.png",

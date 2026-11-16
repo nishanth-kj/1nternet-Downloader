@@ -1,103 +1,86 @@
-<p align="center">
-  <img src="site/public/logo.svg" alt="Internet Downloader logo" width="120" height="120">
-</p>
+<div align="center">
 
-# Internet Downloader
+<img src="site/public/logo.png" alt="1IDM" width="96" height="96">
 
-A desktop-first download manager with companion Android and browser integrations.
+# 1IDM
 
-> **Project status:** active development. Feature coverage varies by platform; see
-> [Platform support](docs/platforms.md) before relying on it for important downloads.
+**1nternet Downloader**
 
-## Features
+Two independent apps — a Windows desktop manager and an Android manager — plus a browser extension for the desktop app.
 
-- HTTP and HTTPS downloads through libcurl
-- Parallel byte-range downloads when the server supports them, with live per-connection progress and speed
-- Download queue with a configurable number of simultaneous downloads
-- Pause, resume, restart and cancel
-- Automatic retries with backoff that resume from the bytes already on disk
-- Strict integrity checks: ranged responses are validated before any byte is written, final sizes are verified, and SHA-256 verification is built in
-- Settings for the download folder, connections per download, retries and a speed limit
-- SQLite download history, JSON settings and a rotating log in `%APPDATA%\InternetDownloader`
-- BitTorrent downloads on desktop through libtorrent
-- Android downloader powered by a native C++ engine
-- Browser extension handoff to the desktop application
+[Windows](#windows) · [Android](#android) · [Extension](#browser-extension) · [License](#license)
 
-## Components
+<br />
 
-| Directory | Description | Status |
-| --- | --- | --- |
-| `core/` | Native Windows desktop application (C++17, wxWidgets) | Primary application |
-| `android/` | Android application (Java + JNI/C++) | arm64-v8a; no BitTorrent |
-| `browser/` | Browser extensions for Chrome, Edge, Brave, Opera, Firefox and Safari | Uses the desktop `idr://` protocol |
-| `site/` | Project website (Next.js static export) | GitHub Pages |
+![C++](https://img.shields.io/badge/C++17-00599C?logo=cplusplus&logoColor=white)
+![Windows](https://img.shields.io/badge/Windows-0078D6?logo=windows&logoColor=white)
+![Android](https://img.shields.io/badge/Android-3DDC84?logo=android&logoColor=white)
+![License](https://img.shields.io/badge/License-Non--commercial-orange)
 
-See [Platform support](docs/platforms.md) for exact limitations.
+</div>
 
-## Quick start
+---
 
-### Windows desktop
+`core/` and `android/` are **separate projects**. They do not share code, a download engine, or a database.
 
-**Requirements:** Windows 10/11, Visual Studio C++ build tools, CMake 3.21+, Git, and [vcpkg](https://github.com/microsoft/vcpkg).
+| Project | What it is |
+| --- | --- |
+| **`core/`** | Native Windows app (wxWidgets, libcurl, libtorrent, SQLite) |
+| **`android/`** | Android app (Java UI, its own JNI/libcurl engine) |
+| **`browser/`** | MV3 extension that sends links to the **Windows** app |
+| **`site/`** | Next.js site for GitHub Pages |
+
+---
+
+## Windows
+
+Segmented HTTP/HTTPS, pause and resume, BitTorrent (magnet / `.torrent`), queue, tray icon, SQLite history at `core/downloads.db`.
 
 ```powershell
 cd core
-./scripts/build.ps1                # Debug; add -Preset release for Release
-./scripts/register_protocol.ps1    # registers idr:// for the browser extensions
-./build/Debug/InternetDownloader.exe
+./scripts/build.ps1                 # Debug  → core/out/Debug/InternetDownloader.exe
+./scripts/build.ps1 -Preset release # Release → core/out/Release/InternetDownloader.exe
 ```
 
-`build.ps1` finds vcpkg through `VCPKG_ROOT`, then `C:\vcpkg`, then the copy bundled with
-Visual Studio, and loads the MSVC environment for you. See
-[Development setup](docs/development.md) for the plain CMake commands and troubleshooting.
+Needs Visual Studio C++ tools, CMake 3.20+, and Ninja. `build.ps1` finds Visual Studio's vcpkg. First configure after a new dependency can take several minutes; later compiles are seconds.
 
-### Android
+Register the protocol handler once (HKCU, no admin):
 
-**Requirements:** JDK 17 or 21, Android SDK, Android NDK 27.0.12077973, CMake 3.22.1, and vcpkg.
+```powershell
+./scripts/register_protocol.ps1
+```
 
-Set `VCPKG_ROOT` and `ANDROID_NDK_HOME`, build the Android curl dependency for the project's overlay triplet, then run:
+## Android
+
+Own engines: JNI/libcurl for HTTP(S), libtorrent4j for magnet/`.torrent`. Pause, resume, queue, browser grabber, SQLite history. `arm64-v8a`. No desktop IPC.
 
 ```bash
+vcpkg install curl:arm64-android --classic --overlay-triplets=android/vcpkg-triplets
 cd android
-./gradlew assembleDebug
+./gradlew assembleRelease
 ```
 
-The exact setup is documented in [Development setup](docs/development.md).
+Needs JDK 17–21, NDK `27.0.12077973`, and `VCPKG_ROOT`. Recreate `android/local.properties` (`sdk.dir=...`) on a fresh machine.
 
-### Browser extension
+## Browser extension
 
-Install the desktop application, register the `idr://` protocol, then load the appropriate unpacked extension from `browser/<browser>/`. Automatic interception is disabled by default.
+Talks to the **Windows** app over `idr://`. Unused by Android.
 
-## Documentation
+1. Build and run the desktop app.
+2. Register `idr://` with `core/scripts/register_protocol.ps1`.
+3. Load `browser/chrome/` as an unpacked extension.
+4. Keep automatic intercept off until a manual handoff works.
 
-Project documentation lives in [docs/](docs/README.md):
+## Website
 
-- [Architecture](docs/architecture.md)
-- [Development setup](docs/development.md)
-- [Platform support and limitations](docs/platforms.md)
-- [Release and distribution](docs/releases.md)
-- [Download correctness checklist](docs/DOWNLOAD_CORRECTNESS_CHECKLIST.md)
-
-Contributors and AI coding agents should start with [AGENTS.md](AGENTS.md). The detailed
-specification, design, conventions and roadmap are in [agents/](agents/README.md).
-
-## Project structure
-
-```text
-.
-├── agents/               Specification, design, conventions, workflows, roadmap
-├── android/              Android application and JNI downloader
-├── browser/              Browser extensions
-├── core/                 C++ desktop application
-├── docs/                 Project and developer documentation
-├── site/                 Static project website
-└── .github/workflows/    Build and deployment workflows
+```bash
+cd site
+npm ci
+npm run build
 ```
-
-## Security
-
-Do not include credentials, private download URLs, or personal data in bug reports. See [SECURITY.md](SECURITY.md) for vulnerability reporting.
 
 ## License
 
-This project uses a custom non-commercial license. It is not an OSI-approved open-source license. Read [LICENSE](LICENSE) before using, modifying, or redistributing the software.
+[Non-commercial](LICENSE) — personal, educational, and research use. Commercial use needs written permission from Nishanth K J.
+
+Security reports: [SECURITY.md](SECURITY.md)

@@ -1,8 +1,8 @@
-# Project specification — Internet Downloader ("IDR")
+# Project specification — 1nternet Downloader ("1IDM")
 
 ## 1. Purpose
 
-IDR is a download manager. It speeds up HTTP(S) downloads by splitting a file
+1IDM is a download manager. It speeds up HTTP(S) downloads by splitting a file
 into byte ranges and downloading them in parallel. It survives interruptions,
 reports failures honestly, and supports BitTorrent. The browser extensions
 hand downloads off to the desktop app.

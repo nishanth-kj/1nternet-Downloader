@@ -11,10 +11,15 @@ import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.core.content.FileProvider;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -55,6 +60,8 @@ public class MainActivity extends AppCompatActivity implements DownloadAdapter.O
     public native void nativeResumeAll();
     public native String nativeGetDownloadProgress(int id);
     public native String nativeGetAllDownloads();
+    public native void nativeRestartDownload(int id);
+    public native void nativeRemoveDownload(int id, boolean deleteFile);
 
     private DrawerLayout drawerLayout;
     private RecyclerView rvDownloads;
@@ -69,6 +76,10 @@ public class MainActivity extends AppCompatActivity implements DownloadAdapter.O
     private TextView tabBrowser;
     private int selectedFilter = 0;
     private boolean browserVisible = false;
+    private DownloadStore store;
+    private boolean restoring;
+    private final ActivityResultLauncher<String[]> torrentPicker =
+            registerForActivityResult(new ActivityResultContracts.OpenDocument(), this::onTorrentPicked);
 
     private final Handler updateHandler = new Handler(Looper.getMainLooper());
     private final Runnable updateRunnable = new Runnable() {
@@ -102,8 +113,12 @@ public class MainActivity extends AppCompatActivity implements DownloadAdapter.O
         findViewById(R.id.btnToolbarAdd).setOnClickListener(v -> showAddDownloadDialog());
         findViewById(R.id.btnOpenMenu).setOnClickListener(v -> drawerLayout.openDrawer(GravityCompat.END));
 
+        store = new DownloadStore(this);
+        DownloadService.ensureRunning(this);
+        TorrentEngine.get().start();
+
         findViewById(R.id.menuAddUrl).setOnClickListener(v -> { closeMenu(); showAddDownloadDialog(); });
-        findViewById(R.id.menuAddTorrent).setOnClickListener(v -> { closeMenu(); showAddDownloadDialog(); });
+        findViewById(R.id.menuAddTorrent).setOnClickListener(v -> { closeMenu(); showAddTorrentDialog(); });
         findViewById(R.id.menuPause).setOnClickListener(v -> { closeMenu(); actOnSelected(true, false); });
         findViewById(R.id.menuResume).setOnClickListener(v -> { closeMenu(); actOnSelected(false, true); });
         findViewById(R.id.menuRestart).setOnClickListener(v -> { closeMenu(); restartSelected(); });
@@ -112,8 +127,18 @@ public class MainActivity extends AppCompatActivity implements DownloadAdapter.O
         findViewById(R.id.menuOpenFolder).setOnClickListener(v -> { closeMenu(); openDownloadsFolder(); });
         findViewById(R.id.menuCopyUrl).setOnClickListener(v -> { closeMenu(); copySelectedUrl(); });
         findViewById(R.id.menuViewSegments).setOnClickListener(v -> { closeMenu(); viewSelectedSegments(); });
-        findViewById(R.id.menuPauseAll).setOnClickListener(v -> { closeMenu(); nativePauseAll(); refreshDownloads(); });
-        findViewById(R.id.menuResumeAll).setOnClickListener(v -> { closeMenu(); nativeResumeAll(); refreshDownloads(); });
+        findViewById(R.id.menuPauseAll).setOnClickListener(v -> {
+            closeMenu();
+            nativePauseAll();
+            TorrentEngine.get().pauseAll();
+            refreshDownloads();
+        });
+        findViewById(R.id.menuResumeAll).setOnClickListener(v -> {
+            closeMenu();
+            nativeResumeAll();
+            TorrentEngine.get().resumeAll();
+            refreshDownloads();
+        });
         findViewById(R.id.menuClearCompleted).setOnClickListener(v -> { closeMenu(); clearCompleted(); });
         findViewById(R.id.menuAbout).setOnClickListener(v -> { closeMenu(); showAbout(); });
 
@@ -165,6 +190,7 @@ public class MainActivity extends AppCompatActivity implements DownloadAdapter.O
             }
         });
 
+        restorePersistedDownloads();
         handleIncomingIntent(getIntent());
     }
 
@@ -283,6 +309,11 @@ public class MainActivity extends AppCompatActivity implements DownloadAdapter.O
 
         String url = data.toString();
         String scheme = data.getScheme();
+        if ("content".equalsIgnoreCase(scheme) || "file".equalsIgnoreCase(scheme)) {
+            File local = copyUriToCache(data, "open.torrent");
+            if (local != null) startDownloadFromUrl(local.getAbsolutePath(), 1);
+            return;
+        }
         if (scheme != null && scheme.equalsIgnoreCase("idr")) {
             String encoded = url.length() > 6 ? url.substring(6) : "";
             try {
@@ -298,14 +329,32 @@ public class MainActivity extends AppCompatActivity implements DownloadAdapter.O
     }
 
     private void startDownloadFromUrl(String url) {
+        startDownloadFromUrl(url, 4);
+    }
+
+    private void startDownloadFromUrl(String url, int threads) {
         File destFolder = getExternalFilesDir(null);
-        String filename = URLUtil.guessFileName(url, null, null);
-        if (filename == null || filename.isEmpty()) {
-            filename = "download_" + System.currentTimeMillis();
+        if (destFolder == null) return;
+
+        if (TorrentEngine.isTorrentSource(url)) {
+            int id = TorrentEngine.get().add(url, destFolder);
+            if (id < 0) {
+                Toast.makeText(this, "Could not start torrent", Toast.LENGTH_LONG).show();
+                return;
+            }
+            store.upsert(url, destFolder.getAbsolutePath(), "torrent", threads, true, 1);
+            Toast.makeText(this, "Torrent added", Toast.LENGTH_SHORT).show();
+        } else {
+            String filename = URLUtil.guessFileName(url, null, null);
+            if (filename == null || filename.isEmpty()) {
+                filename = "download_" + System.currentTimeMillis();
+            }
+            String destPath = new File(destFolder, filename).getAbsolutePath();
+            nativeStartDownload(url, destPath, threads);
+            store.upsert(url, destPath, filename, threads, false, 1);
+            Toast.makeText(this, "Download added", Toast.LENGTH_SHORT).show();
         }
-        String destPath = new File(destFolder, filename).getAbsolutePath();
-        nativeStartDownload(url, destPath, 4);
-        Toast.makeText(this, "Download added", Toast.LENGTH_SHORT).show();
+        DownloadService.ensureRunning(this);
         showDownloadsTab();
         refreshDownloads();
     }
@@ -344,6 +393,7 @@ public class MainActivity extends AppCompatActivity implements DownloadAdapter.O
                         obj.getInt("threads"),
                         obj.getBoolean("isTorrent")
                 );
+                store.upsert(item.url, item.destination, item.filename, item.threads, item.isTorrent, item.status);
 
                 String fname = item.filename == null ? "" : item.filename.toLowerCase(Locale.US);
                 boolean matches;
@@ -358,6 +408,22 @@ public class MainActivity extends AppCompatActivity implements DownloadAdapter.O
                     default: matches = true; break;
                 }
 
+                if (matches) list.add(item);
+            }
+
+            for (TorrentEngine.Snapshot snap : TorrentEngine.get().snapshots()) {
+                DownloadItem item = new DownloadItem(
+                        snap.id, snap.name, snap.source, snap.saveDir,
+                        snap.downloaded, snap.total, snap.speed, snap.status,
+                        1, true, snap.peers, snap.seeds);
+                store.upsert(item.url, item.destination, item.filename, 1, true, item.status);
+                boolean matches;
+                switch (selectedFilter) {
+                    case 1: matches = (item.status == 1 || item.status == 0); break;
+                    case 2: matches = (item.status == 3); break;
+                    case 3: matches = true; break;
+                    default: matches = selectedFilter == 0; break;
+                }
                 if (matches) list.add(item);
             }
 
@@ -394,9 +460,7 @@ public class MainActivity extends AppCompatActivity implements DownloadAdapter.O
                         int threads = (int) sliderThreads.getValue();
                         File destFolder = getExternalFilesDir(null);
                         String destPath = new File(destFolder, "download_" + System.currentTimeMillis()).getAbsolutePath();
-                        nativeStartDownload(url, destPath, threads);
-                        Toast.makeText(this, "Accelerated download started (" + threads + " streams)", Toast.LENGTH_SHORT).show();
-                        refreshDownloads();
+                        startDownloadFromUrl(url, threads);
                     }
                 })
                 .setNegativeButton("Cancel", null)
@@ -409,8 +473,13 @@ public class MainActivity extends AppCompatActivity implements DownloadAdapter.O
             Toast.makeText(this, "Select a download first", Toast.LENGTH_SHORT).show();
             return;
         }
-        if (pause) nativePauseDownload(item.id);
-        if (resume) nativeResumeDownload(item.id);
+        if (item.isTorrent) {
+            if (pause) TorrentEngine.get().pause(item.id);
+            if (resume) TorrentEngine.get().resume(item.id);
+        } else {
+            if (pause) nativePauseDownload(item.id);
+            if (resume) nativeResumeDownload(item.id);
+        }
         refreshDownloads();
     }
 
@@ -420,8 +489,12 @@ public class MainActivity extends AppCompatActivity implements DownloadAdapter.O
             Toast.makeText(this, "Select a download first", Toast.LENGTH_SHORT).show();
             return;
         }
-        nativeCancelDownload(item.id);
-        nativeStartDownload(item.url, item.destination, item.threads);
+        if (item.isTorrent) {
+            TorrentEngine.get().remove(item.id);
+            startDownloadFromUrl(item.url, item.threads);
+        } else {
+            nativeRestartDownload(item.id);
+        }
         refreshDownloads();
     }
 
@@ -431,7 +504,9 @@ public class MainActivity extends AppCompatActivity implements DownloadAdapter.O
             Toast.makeText(this, "Select a download first", Toast.LENGTH_SHORT).show();
             return;
         }
-        nativeCancelDownload(item.id);
+        if (item.isTorrent) TorrentEngine.get().remove(item.id);
+        else nativeRemoveDownload(item.id, false);
+        store.delete(item.url);
         refreshDownloads();
     }
 
@@ -475,10 +550,15 @@ public class MainActivity extends AppCompatActivity implements DownloadAdapter.O
             Toast.makeText(this, "Select a download first", Toast.LENGTH_SHORT).show();
             return;
         }
-        String msg = "File: " + item.filename
-                + "\nConnections: " + item.threads + " parallel threads"
-                + "\nSpeed: " + item.getFormattedSpeed()
-                + "\nStatus: " + item.status;
+        String msg = item.isTorrent
+                ? ("Torrent: " + item.filename
+                    + "\nPeers: " + item.peers
+                    + "\nSeeds: " + item.seeds
+                    + "\nSpeed: " + item.getFormattedSpeed())
+                : ("File: " + item.filename
+                    + "\nConnections: " + item.threads + " parallel threads"
+                    + "\nSpeed: " + item.getFormattedSpeed()
+                    + "\nStatus: " + item.status);
         new MaterialAlertDialogBuilder(this)
                 .setTitle("Segment & Connection Details")
                 .setMessage(msg)
@@ -494,9 +574,13 @@ public class MainActivity extends AppCompatActivity implements DownloadAdapter.O
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject obj = arr.getJSONObject(i);
                 if (obj.getInt("status") == 3) {
-                    nativeCancelDownload(obj.getInt("id"));
+                    nativeRemoveDownload(obj.getInt("id"), false);
                 }
             }
+            for (TorrentEngine.Snapshot snap : TorrentEngine.get().snapshots()) {
+                if (snap.status == 3) TorrentEngine.get().remove(snap.id);
+            }
+            store.deleteCompleted();
             refreshDownloads();
         } catch (Exception e) {
             e.printStackTrace();
@@ -505,27 +589,81 @@ public class MainActivity extends AppCompatActivity implements DownloadAdapter.O
 
     private void showAbout() {
         new MaterialAlertDialogBuilder(this)
-                .setTitle("About Internet Downloader")
-                .setMessage("Internet Downloader v1.0.0\n\nClassic simple mobile layout with the same tasks as desktop: add URL/torrent, pause, resume, browser grabber, and multi-stream downloads.")
+                .setTitle("About 1nternet Downloader")
+                .setMessage("1nternet Downloader v1.0.0\n\nHTTP segmented downloads and BitTorrent/magnet on Android, plus pause, resume, browser grabber, and SQLite history.")
                 .setPositiveButton("OK", null)
                 .show();
     }
 
+    private void showAddTorrentDialog() {
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("Add torrent")
+                .setItems(new CharSequence[]{"Magnet or HTTP .torrent URL", "Open .torrent file"}, (dialog, which) -> {
+                    if (which == 0) showAddDownloadDialog();
+                    else torrentPicker.launch(new String[]{"application/x-bittorrent", "*/*"});
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void onTorrentPicked(Uri uri) {
+        if (uri == null) return;
+        File local = copyUriToCache(uri, "picked.torrent");
+        if (local == null) {
+            Toast.makeText(this, "Could not read torrent file", Toast.LENGTH_LONG).show();
+            return;
+        }
+        startDownloadFromUrl(local.getAbsolutePath(), 1);
+    }
+
+    private File copyUriToCache(Uri uri, String name) {
+        File out = new File(getCacheDir(), System.currentTimeMillis() + "-" + name);
+        try (InputStream in = getContentResolver().openInputStream(uri);
+             OutputStream os = new FileOutputStream(out)) {
+            if (in == null) return null;
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) os.write(buf, 0, n);
+            return out;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void restorePersistedDownloads() {
+        restoring = true;
+        File destFolder = getExternalFilesDir(null);
+        for (DownloadStore.Record record : store.loadAll()) {
+            if (record.torrent) {
+                File save = record.destination != null ? new File(record.destination) : destFolder;
+                TorrentEngine.get().add(record.url, save);
+            } else if (record.status != 3) {
+                int id = nativeStartDownload(record.url, record.destination, record.threads > 0 ? record.threads : 4);
+                if (record.status == 2) nativePauseDownload(id);
+            }
+        }
+        restoring = false;
+    }
+
     @Override
     public void onPause(DownloadItem item) {
-        nativePauseDownload(item.id);
+        if (item.isTorrent) TorrentEngine.get().pause(item.id);
+        else nativePauseDownload(item.id);
         refreshDownloads();
     }
 
     @Override
     public void onResume(DownloadItem item) {
-        nativeResumeDownload(item.id);
+        if (item.isTorrent) TorrentEngine.get().resume(item.id);
+        else nativeResumeDownload(item.id);
         refreshDownloads();
     }
 
     @Override
     public void onCancel(DownloadItem item) {
-        nativeCancelDownload(item.id);
+        if (item.isTorrent) TorrentEngine.get().remove(item.id);
+        else nativeRemoveDownload(item.id, false);
+        store.delete(item.url);
         refreshDownloads();
     }
 
