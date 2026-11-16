@@ -215,7 +215,7 @@ void MainWindow::SetupMenuBar()
     menuBrowser->Append(ID_BrowserForward, "&Forward");
 
     wxMenu *menuHelp = new wxMenu;
-    menuHelp->Append(wxID_ABOUT, "&About Internet Downloader", "About this software");
+    menuHelp->Append(wxID_ABOUT, "&About 1nternet Downloader", "About this software");
 
     menuBar->Append(menuFile, "&File");
     menuBar->Append(menuDownloads, "&Downloads");
@@ -568,8 +568,8 @@ void MainWindow::OnExit(wxCommandEvent &WXUNUSED(event))
 
 void MainWindow::OnAbout(wxCommandEvent &WXUNUSED(event))
 {
-    wxMessageBox("Internet Downloader v1.0.0\n\nHigh-Performance Accelerated Download Manager\nSupports Multi-Segment HTTP/HTTPS & BitTorrent / Magnet links.\nBuilt with C++, wxWidgets, libcurl & sqlite-orm.",
-                 "About Internet Downloader", wxOK | wxICON_INFORMATION, this);
+    wxMessageBox("1nternet Downloader v1.0.0\n\nHigh-Performance Accelerated Download Manager\nSupports Multi-Segment HTTP/HTTPS & BitTorrent / Magnet links.\nBuilt with C++, wxWidgets, libcurl & sqlite-orm.",
+                 "About 1nternet Downloader", wxOK | wxICON_INFORMATION, this);
 }
 
 void MainWindow::OnAddDownload(wxCommandEvent &WXUNUSED(event))

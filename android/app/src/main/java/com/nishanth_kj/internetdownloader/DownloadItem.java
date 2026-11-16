@@ -11,8 +11,14 @@ public class DownloadItem {
     public int status; // 0=Queued, 1=Downloading, 2=Paused, 3=Completed, 4=Error
     public int threads;
     public boolean isTorrent;
+    public int peers;
+    public int seeds;
 
     public DownloadItem(int id, String filename, String url, String destination, long downloadedBytes, long totalBytes, double speed, int status, int threads, boolean isTorrent) {
+        this(id, filename, url, destination, downloadedBytes, totalBytes, speed, status, threads, isTorrent, 0, 0);
+    }
+
+    public DownloadItem(int id, String filename, String url, String destination, long downloadedBytes, long totalBytes, double speed, int status, int threads, boolean isTorrent, int peers, int seeds) {
         this.id = id;
         this.filename = filename;
         this.url = url;
@@ -23,6 +29,8 @@ public class DownloadItem {
         this.status = status;
         this.threads = threads;
         this.isTorrent = isTorrent;
+        this.peers = peers;
+        this.seeds = seeds;
     }
 
     public int getProgressPercent() {

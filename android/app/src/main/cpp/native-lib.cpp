@@ -631,6 +631,42 @@ namespace idr_android
                 t->Resume();
         }
 
+        void RestartDownload(int id)
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            for (auto &t : m_tasks)
+            {
+                if (t->id == id)
+                {
+                    t->Stop();
+                    if (t->workerThread.joinable())
+                        t->workerThread.join();
+                    std::error_code ec;
+                    std::filesystem::remove(t->destination, ec);
+                    t->downloadedBytes = 0;
+                    t->Start();
+                    break;
+                }
+            }
+        }
+
+        void RemoveDownload(int id, bool deleteFile)
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            auto it = std::find_if(m_tasks.begin(), m_tasks.end(), [id](const std::shared_ptr<NativeDownloadTask> &t)
+                                   { return t->id == id; });
+            if (it != m_tasks.end())
+            {
+                (*it)->Stop();
+                if (deleteFile)
+                {
+                    std::error_code ec;
+                    std::filesystem::remove((*it)->destination, ec);
+                }
+                m_tasks.erase(it);
+            }
+        }
+
     private:
         NativeDownloadEngine() { curl_global_init(CURL_GLOBAL_ALL); }
         int m_nextId{0};
@@ -651,7 +687,7 @@ extern "C"
         JNIEnv *env,
         jobject /* this */)
     {
-        std::string info = "Internet Downloader Native C++ Core v1.0.0 (Multi-threaded, libcurl-backed)";
+        std::string info = "1nternet Downloader Native C++ Core v1.0.0 (Multi-threaded, libcurl-backed)";
         return env->NewStringUTF(info.c_str());
     }
 
@@ -733,6 +769,25 @@ extern "C"
     {
         std::string json = idr_android::NativeDownloadEngine::GetInstance().GetAllDownloadsJson();
         return env->NewStringUTF(json.c_str());
+    }
+
+    JNIEXPORT void JNICALL
+    Java_com_nishanth_1kj_internetdownloader_MainActivity_nativeRestartDownload(
+        JNIEnv * /* env */,
+        jobject /* this */,
+        jint id)
+    {
+        idr_android::NativeDownloadEngine::GetInstance().RestartDownload(id);
+    }
+
+    JNIEXPORT void JNICALL
+    Java_com_nishanth_1kj_internetdownloader_MainActivity_nativeRemoveDownload(
+        JNIEnv * /* env */,
+        jobject /* this */,
+        jint id,
+        jboolean deleteFile)
+    {
+        idr_android::NativeDownloadEngine::GetInstance().RemoveDownload(id, deleteFile == JNI_TRUE);
     }
 
 } // extern "C"

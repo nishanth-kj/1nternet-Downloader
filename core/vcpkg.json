@@ -9,13 +9,10 @@
       "name": "curl",
       "features": ["ssl", "http2"]
     },
-    "openssl",
     "zlib",
     "sqlite3",
-    "nlohmann-json",
-    "fmt",
-    "spdlog",
     "sqlite-orm",
+    "spdlog",
     {
       "name": "libtorrent",
       "default-features": false

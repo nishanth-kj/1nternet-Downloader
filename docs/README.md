@@ -1,6 +1,6 @@
 # Project documentation
 
-This directory contains the maintained technical documentation for Internet Downloader.
+This directory contains the maintained technical documentation for 1nternet Downloader.
 
 | Document | Contents |
 | --- | --- |

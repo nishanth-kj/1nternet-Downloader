@@ -12,21 +12,26 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/1nternet-Downloader/",
   },
-  title: "Internet-Downloader | Fast & Simple Desktop Download Manager",
-  description: "Download, manage, pause, resume, and organize your downloads with a lightweight desktop application.",
+  title: "1IDM | 1nternet Downloader",
+  description: "Download, manage, pause, resume, and organize files on Windows, Android, and from the browser.",
+  icons: {
+    icon: "/logo.svg",
+  },
   keywords: ["download manager", "internet downloader", "desktop downloader", "open source downloader", "fast download", "resume download"],
   authors: [{ name: "Nishanth K J", url: "https://github.com/nishanth-kj" }],
   openGraph: {
-    title: "Internet-Downloader",
-    description: "A fast and simple download manager for your desktop.",
+    title: "1IDM | 1nternet Downloader",
+    description: "Download manager for Windows, Android, and the browser.",
     url: "https://nishanth-kj.github.io/1nternet-Downloader/",
-    siteName: "Internet-Downloader",
+    siteName: "1IDM",
     type: "website",
+    images: [{ url: "/logo.svg", alt: "1IDM" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Internet-Downloader",
-    description: "A fast and simple download manager for your desktop.",
+    title: "1IDM | 1nternet Downloader",
+    description: "Download manager for Windows, Android, and the browser.",
+    images: ["/logo.svg"],
   }
 };
 

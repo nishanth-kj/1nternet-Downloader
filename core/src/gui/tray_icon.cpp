@@ -23,7 +23,7 @@ wxBEGIN_EVENT_TABLE(AppTrayIcon, wxTaskBarIcon)
     }
     if (icon.IsOk())
     {
-        SetIcon(icon, "Internet Downloader");
+        SetIcon(icon, "1nternet Downloader");
     }
 }
 
@@ -35,7 +35,7 @@ AppTrayIcon::~AppTrayIcon()
 wxMenu *AppTrayIcon::CreatePopupMenu()
 {
     wxMenu *menu = new wxMenu;
-    menu->Append(ID_TRAY_RESTORE, "&Open Internet Downloader");
+    menu->Append(ID_TRAY_RESTORE, "&Open 1nternet Downloader");
     menu->Append(ID_TRAY_ADD_DOWNLOAD, "&Add Download...");
     menu->AppendSeparator();
     menu->Append(ID_TRAY_PAUSE_ALL, "&Pause All Downloads");

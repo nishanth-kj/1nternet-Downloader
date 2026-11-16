@@ -61,7 +61,7 @@ public:
             return false;
         }
 
-        MainWindow *frame = new MainWindow("Internet Downloader");
+        MainWindow *frame = new MainWindow("1nternet Downloader");
         frame->Show(true);
 
         if (!forwardedUrl.IsEmpty())

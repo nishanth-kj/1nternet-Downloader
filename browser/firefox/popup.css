@@ -29,9 +29,9 @@ body {
 }
 
 .logo-icon {
-  width: 18px;
-  height: 18px;
-  color: #38bdf8;
+  width: 22px;
+  height: 22px;
+  background: transparent;
 }
 
 .logo-title {

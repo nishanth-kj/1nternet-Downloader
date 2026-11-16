@@ -65,7 +65,9 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
         DownloadItem item = items.get(position);
 
         holder.tvFilename.setText(item.filename);
-        holder.tvTag.setText(item.isTorrent ? "Torrent" : item.threads + " Threads");
+        holder.tvTag.setText(item.isTorrent
+                ? ("Torrent  " + item.seeds + " seeds")
+                : item.threads + " Threads");
         holder.progressBar.setProgress(item.getProgressPercent());
 
         String progressText = item.getFormattedDownloaded() + " / " + item.getFormattedTotal() + " (" + item.getProgressPercent() + "%)";
