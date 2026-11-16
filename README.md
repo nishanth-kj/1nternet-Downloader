@@ -1,121 +1,88 @@
 # Internet Downloader
 
-A desktop-first download manager with a native C++/wxWidgets application, an Android client, a Chrome-compatible browser extension, and a Next.js project website.
+A desktop-first download manager with companion Android and browser integrations.
 
-> **Project status:** active development. Builds and feature coverage vary by platform. Review the platform limitations and release notes before relying on this application for important downloads.
+## Features
 
-## Current capabilities
+- HTTP and HTTPS downloads
+- Pause, resume, cancel, and queued downloads
+- Parallel byte-range downloads when supported by the server
+- SQLite download history on desktop
+- BitTorrent downloads on desktop
+- Android downloader powered by a native C++ engine
+- Browser extension handoff to the desktop application
 
-- HTTP/HTTPS downloads through libcurl.
-- Pause, resume, cancel, and download queue management in the desktop application.
-- Parallel byte-range downloads when the server advertises range support.
-- SQLite-backed desktop download metadata.
-- BitTorrent integration in the desktop build through libtorrent.
-- Android native download engine using JNI and libcurl.
-- Browser-to-desktop handoff through the registered `idr://` protocol.
-- Static project website deployed with GitHub Pages.
+## Components
 
-## Platform support and limitations
-
-| Component | Current scope | Important limitation |
+| Directory | Description | Status |
 | --- | --- | --- |
-| Desktop | C++17, wxWidgets, libcurl, SQLite, libtorrent | Validate behavior on the target Windows version before production use. |
-| Android | Java/Kotlin application layer with C++/JNI native downloader | Current native build targets `arm64-v8a`; torrent/magnet downloads are not supported in the Android native engine. |
-| Browser extension | Manifest V3 extension for Chrome-compatible browsers | Desktop handoff requires the desktop app and the `idr://` protocol registration. Automatic interception is off by default. |
-| Website | Next.js static export | The website's Releases link points to GitHub Releases; installable artifacts must actually be published there. |
+| `core/` | Native Windows desktop application (C++17, wxWidgets) | Primary application |
+| `android/` | Android application (Java + JNI/C++) | arm64-v8a; no BitTorrent |
+| `browser/` | Browser extensions | Uses the desktop `idr://` protocol |
+| `site/` | Project website (Next.js static export) | GitHub Pages |
 
-This repository uses a custom **non-commercial license**. It is not licensed under an OSI-approved open-source license. Read [LICENSE](LICENSE) before redistributing or using the project commercially.
+See [Platform support](docs/platforms.md) for exact limitations.
 
-## Repository layout
+## Quick start
 
-- `core/` — desktop application, download engine, network layer, persistence, torrent integration, and build scripts.
-- `android/` — Android application and native JNI/libcurl downloader.
-- `browser/chrome/` — browser extension and desktop protocol handoff.
-- `site/` — Next.js website configured for static GitHub Pages export.
-- `.github/workflows/` — platform build and website CI workflows.
-- `docs/DOWNLOAD_CORRECTNESS_CHECKLIST.md` — manual and release acceptance checklist.
-- `SECURITY.md` — vulnerability reporting guidance.
+### Windows desktop
 
-## Desktop build (Windows)
+**Requirements:** Windows 10/11, Visual Studio C++ build tools, CMake 3.21+, Git, and [vcpkg](https://github.com/microsoft/vcpkg).
 
-### Prerequisites
-
-- Windows with Visual Studio C++ build tools and Windows SDK.
-- CMake 3.20 or newer.
-- Git.
-- vcpkg with `VCPKG_ROOT` set to the vcpkg checkout path.
-
-### Build
-
-From PowerShell:
+1. Install vcpkg and set `VCPKG_ROOT` to its installation directory.
+2. Open a terminal with the Visual Studio C++ build tools available.
+3. Run:
 
 ```powershell
 cd core
-./scripts/build.ps1
+cmake --preset default
+cmake --build --preset default
 ```
 
-Or configure and build with CMake:
+The executable is created under `core/build/`. See [Development setup](docs/development.md) for Debug, Release, and troubleshooting instructions.
 
-```powershell
-cmake -S core -B core/build -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
-cmake --build core/build --config Release --parallel
-```
+### Android
 
-The CMake project uses vcpkg packages for libcurl, zlib, SQLite, nlohmann-json, fmt, spdlog, wxWidgets, SqliteOrm, and libtorrent. See `core/vcpkg.json` (if present) and the workflow configuration for the pinned dependency setup.
+**Requirements:** JDK 17, Android SDK, Android NDK 27.0.12077973, CMake 3.22.1, and vcpkg.
 
-## Android build
-
-The Android workflow uses JDK 17, Android SDK/NDK, CMake 3.22.1, and vcpkg to build libcurl for the `arm64-v8a` ABI.
+Set `VCPKG_ROOT` and `ANDROID_NDK_HOME`, build the Android curl dependency for the project's overlay triplet, then run:
 
 ```bash
 cd android
-./gradlew assembleRelease
+./gradlew assembleDebug
 ```
 
-Set `VCPKG_ROOT` and `ANDROID_NDK_HOME` to match the versions configured in `android/app/build.gradle` before building locally. A successful APK build is not a substitute for testing downloads on a real device.
+The exact setup is documented in [Platform support](docs/platforms.md).
 
-## Browser extension setup
+### Browser extension
 
-1. Build and install the desktop application.
-2. Register the `idr://` protocol using the script under `core/scripts/` where supported.
-3. Open the browser's extension management page and enable Developer mode.
-4. Load the unpacked extension from `browser/chrome/`.
-5. Test a manual handoff before enabling automatic capture.
+Install the desktop application, register the `idr://` protocol, then load the appropriate unpacked extension from `browser/<browser>/`. Automatic interception is disabled by default.
 
-Automatic interception is disabled by default because the extension cannot reliably confirm that the desktop application accepted a custom-protocol request. Enabling interception may cancel a browser download before handoff succeeds; keep it disabled unless you have verified your local setup.
+## Documentation
 
-## Website
+Project documentation lives in [docs/](docs/README.md):
 
-The site is in `site/` and uses Next.js static export with the GitHub Pages base path `/1nternet-Downloader`.
+- [Architecture](docs/architecture.md)
+- [Development setup](docs/development.md)
+- [Platform support and limitations](docs/platforms.md)
+- [Release and distribution](docs/releases.md)
 
-```bash
-cd site
-npm ci
-npm run lint
-npm run build
+## Project structure
+
+```text
+.
+├── android/              Android application and JNI downloader
+├── browser/              Browser extensions
+├── core/                 C++ desktop application
+├── docs/                 Project and developer documentation
+├── site/                 Static project website
+└── .github/workflows/    Build and deployment workflows
 ```
-
-The website CI workflow runs lint and build checks for pull requests that change site files. Metadata includes canonical URL configuration and generated `robots.txt` and `sitemap.xml` routes.
-
-## Download correctness and release validation
-
-Before distributing a build, use [the download correctness checklist](docs/DOWNLOAD_CORRECTNESS_CHECKLIST.md). At minimum, validate:
-
-- Correct bytes and SHA-256 checksum for a known test file.
-- Correct handling of servers that reject or ignore byte ranges.
-- Interrupted transfers, resume offsets, redirects, and HTTP error statuses.
-- Cancel/remove/shutdown while transfers are active.
-- Disk-full and destination-permission failures.
-- Browser handoff failure and recovery.
-- Android pause/resume and segmented downloads on a physical device.
-- Versioned release artifacts, checksums, and release notes.
-
-CI confirms only the checks that it actually runs. Do not infer end-to-end download correctness from a successful compile.
 
 ## Security
 
-Please report vulnerabilities privately where possible. See [SECURITY.md](SECURITY.md). Avoid publishing private URLs, tokens, or personal data in issues.
+Do not include credentials, private download URLs, or personal data in bug reports. See [SECURITY.md](SECURITY.md) for vulnerability reporting.
 
 ## License
 
-See [LICENSE](LICENSE) for the complete non-commercial terms.
+This project uses a custom non-commercial license. It is not an OSI-approved open-source license. Read [LICENSE](LICENSE) before using, modifying, or redistributing the software.
