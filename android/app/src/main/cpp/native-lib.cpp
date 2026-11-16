@@ -95,12 +95,18 @@ namespace idr_android
             curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
             curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
             curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+            curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
+            curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
+            curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
+            curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
             curl_easy_setopt(curl, CURLOPT_USERAGENT, kUserAgent);
             curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, HeaderCallback);
             curl_easy_setopt(curl, CURLOPT_HEADERDATA, &result);
 
             CURLcode res = curl_easy_perform(curl);
-            if (res == CURLE_OK)
+            long httpCode = 0;
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+            if (res == CURLE_OK && httpCode >= 200 && httpCode < 300)
             {
                 curl_off_t cl = -1;
                 curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl);
@@ -126,6 +132,10 @@ namespace idr_android
             const size_t total = size * nitems;
             if (!ctx) return total;
             const std::string line(buffer, total);
+            // A redirect can emit multiple header blocks; only use the final block's
+            // Content-Range value for validating the final HTTP response.
+            if (line.rfind("HTTP/", 0) == 0)
+                ctx->contentRange.clear();
             const std::string prefix = "Content-Range:";
             if (line.rfind(prefix, 0) == 0)
             {
@@ -178,6 +188,10 @@ namespace idr_android
                 curl_easy_setopt(curl, CURLOPT_RANGE, range.c_str());
             }
             curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+            curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
+            curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
+            curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
+            curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
             curl_easy_setopt(curl, CURLOPT_USERAGENT, kUserAgent);
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, RangeWriteCallback);
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, &ctx);
