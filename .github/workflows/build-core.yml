@@ -29,7 +29,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Validate browser extensions
         shell: bash
@@ -56,9 +56,6 @@ jobs:
           vcpkgDirectory: ${{ runner.workspace }}/vcpkg
           vcpkgGitCommitId: 94a541197763a4f449a1b91478df48c0584a6256
 
-      - name: Setup Ninja
-        uses: seanmiddleditch/gha-setup-ninja@v5
-
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
@@ -72,7 +69,7 @@ jobs:
         run: cmake --build core/out --config Release --parallel
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: InternetDownloader-Windows-x64
           path: |
