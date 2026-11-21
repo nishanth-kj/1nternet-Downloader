@@ -105,7 +105,7 @@ impl Config {
         self.settings.read().unwrap().clone()
     }
 
-    pub fn update<F>(&self, f: F) -> crate::model::error::Result<Settings>
+    pub fn update<F>(&self, f: F) -> crate::exception::Result<Settings>
     where
         F: FnOnce(&mut Settings),
     {
@@ -114,8 +114,8 @@ impl Config {
         settings.normalize();
 
         let json = serde_json::to_string_pretty(&*settings)
-            .map_err(|e| crate::model::error::IdmError::Validation(e.to_string()))?;
-        fs::write(&self.path, json).map_err(crate::model::error::IdmError::from)?;
+            .map_err(|e| crate::exception::IdmException::Validation(e.to_string()))?;
+        fs::write(&self.path, json).map_err(crate::exception::IdmException::from)?;
 
         Ok(settings.clone())
     }

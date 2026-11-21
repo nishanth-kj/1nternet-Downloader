@@ -1,5 +1,7 @@
+pub mod database;
 pub mod download;
 pub mod fast_c;
+pub mod r#impl;
 pub mod ipc;
 pub mod network;
 pub mod queue;
@@ -29,9 +31,27 @@ where
     get_runtime().spawn(future)
 }
 
-pub use download::{DownloadTask, DynamicScheduler, SpeedMeter, WorkerAssignment};
+// Traits
+pub use database::DatabaseService;
+pub use download::DownloadService;
+pub use network::NetworkService;
+pub use queue::QueueService;
+pub use torrent::TorrentService;
+
+// Concrete implementations from service/impl
+pub use r#impl::database::SqliteDatabaseService;
+pub use r#impl::download::DownloadTask;
+pub use r#impl::network::NetworkClient;
+pub use r#impl::queue::QueueManager;
+pub use r#impl::torrent::{TorrentManager, TorrentTask};
+
+// Backwards-compatible alias for primary database implementation
+pub type Database = SqliteDatabaseService;
+
+// Algorithms and structures
+pub use download::{DynamicScheduler, SpeedMeter, WorkerAssignment};
 pub use fast_c::{fast_crc32, fast_is_all_zero};
 pub use ipc::{decode_idr_url, windows};
-pub use network::{NetworkClient, RemoteCapabilities};
-pub use queue::{QueueCommand, QueueManager};
-pub use torrent::{TorrentManager, TorrentSnapshot, TorrentStatus, TorrentTask};
+pub use network::RemoteCapabilities;
+pub use queue::QueueCommand;
+pub use torrent::{TorrentSnapshot, TorrentStatus};

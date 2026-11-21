@@ -11,14 +11,16 @@ pub use exception::{
     Result, StorageException,
 };
 pub use model::{
-    AddDownloadRequest, AddTorrentRequest, Database, DownloadAction, DownloadActionRequest,
+    AddDownloadRequest, AddTorrentRequest, DownloadAction, DownloadActionRequest,
     DownloadId, DownloadItem, DownloadSegment, DownloadSnapshot, DownloadStatus, IdmError,
     TorrentItem, UpdateSettingsRequest,
 };
 pub use service::{
-    decode_idr_url, fast_crc32, fast_is_all_zero, get_runtime, spawn, windows, DownloadTask,
-    DynamicScheduler, NetworkClient, QueueCommand, QueueManager, RemoteCapabilities, SpeedMeter,
-    TorrentManager, TorrentSnapshot, TorrentStatus, TorrentTask, WorkerAssignment,
+    decode_idr_url, fast_crc32, fast_is_all_zero, get_runtime, spawn, windows, Database,
+    DatabaseService, DownloadService, DownloadTask, DynamicScheduler, NetworkClient,
+    NetworkService, QueueCommand, QueueManager, QueueService, RemoteCapabilities, SpeedMeter,
+    SqliteDatabaseService, TorrentManager, TorrentService, TorrentSnapshot, TorrentStatus,
+    TorrentTask, WorkerAssignment,
 };
 pub use ui::IcedApp;
 pub use utils::*;
@@ -26,6 +28,7 @@ pub use utils::*;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     #[test]
     fn test_fast_c_primitives() {
@@ -141,7 +144,7 @@ mod tests {
         let _ = std::fs::create_dir_all(&temp_dir);
         let db_path = temp_dir.join("test.db");
 
-        let db = Database::open(&db_path).expect("Database must open");
+        let db = SqliteDatabaseService::open(&db_path).expect("Database must open");
         let item = DownloadItem {
             id: 0,
             url: "https://example.com/item.bin".to_string(),
@@ -205,5 +208,29 @@ mod tests {
         };
         assert_eq!(action.id, 42);
         assert_eq!(action.action, DownloadAction::Pause);
+    }
+
+    #[test]
+    fn test_traits_polymorphism() {
+        let temp_dir = std::env::temp_dir().join(format!("idm_trait_test_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let db_path = temp_dir.join("test_trait.db");
+
+        let db = Arc::new(SqliteDatabaseService::open(&db_path).expect("Database must open"));
+        let db_trait: Arc<dyn DatabaseService> = db;
+
+        let item = DownloadItem::new(
+            "https://example.com/poly.bin".to_string(),
+            "C:\\Downloads\\poly.bin".to_string(),
+            "poly.bin".to_string(),
+        );
+
+        let id = db_trait.insert_download(&item).expect("Insert via trait must succeed");
+        assert!(id > 0);
+
+        let loaded = db_trait.get_download(id).unwrap().unwrap();
+        assert_eq!(loaded.filename, "poly.bin");
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

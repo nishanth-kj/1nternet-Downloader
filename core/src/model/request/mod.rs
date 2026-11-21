@@ -1,4 +1,4 @@
-use crate::model::download::DownloadId;
+use crate::model::database::DownloadId;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 

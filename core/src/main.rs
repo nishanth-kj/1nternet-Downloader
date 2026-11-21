@@ -56,7 +56,8 @@ fn main() -> anyhow::Result<()> {
     let config = Config::load();
     let settings = config.get();
 
-    let database = Arc::new(Database::open_default().expect("Failed to open SQLite database"));
+    let database: Arc<dyn idm_lib::service::DatabaseService> =
+        Arc::new(Database::open_default().expect("Failed to open SQLite database"));
     info!("Initialized SQLite database connection");
 
     // 5. Initialize Core Download Queue
