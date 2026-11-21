@@ -4,10 +4,9 @@ pub mod response;
 
 pub use crate::config::{Config, Settings};
 pub use crate::exception::{IdmException, IdmException as IdmError, Result};
-pub use crate::service::Database;
 pub use database::{
-    DownloadId, DownloadItem, DownloadStatus, TorrentItem, CREATE_DOWNLOADS_TABLE_SQL,
-    CREATE_TORRENTS_TABLE_SQL, TABLE_DOWNLOADS, TABLE_TORRENTS,
+    init_schema, DownloadId, DownloadItem, DownloadStatus, SegmentItem, TorrentItem,
+    CREATE_DOWNLOADS_TABLE_SQL, CREATE_TORRENTS_TABLE_SQL,
 };
 pub use request::{
     AddDownloadRequest, AddTorrentRequest, DownloadAction, DownloadActionRequest,

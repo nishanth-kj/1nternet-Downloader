@@ -1,13 +1,15 @@
 use crate::config::Settings;
-use crate::exception::Result;
+use crate::exception::{DatabaseException, Result};
+use crate::model::database::segments::SegmentItem;
+use crate::model::database::{downloads, segments};
 use crate::model::{DownloadId, DownloadItem, DownloadSnapshot, DownloadStatus};
-use crate::service::database::DatabaseService;
-use crate::service::r#impl::download::DownloadTask;
 use crate::service::queue::QueueService;
+use crate::service::r#impl::download::DownloadTask;
 use parking_lot::RwLock;
+use rusqlite::Connection;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 use tracing::info;
@@ -19,17 +21,17 @@ struct ManagedTask {
 }
 
 pub struct QueueManager {
-    database: Arc<dyn DatabaseService>,
+    conn: Arc<Mutex<Connection>>,
     tasks: Arc<RwLock<HashMap<DownloadId, ManagedTask>>>,
     settings: Arc<RwLock<Settings>>,
     event_tx: broadcast::Sender<DownloadSnapshot>,
 }
 
 impl QueueManager {
-    pub fn new(database: Arc<dyn DatabaseService>, settings: Settings) -> Arc<Self> {
+    pub fn new(conn: Arc<Mutex<Connection>>, settings: Settings) -> Arc<Self> {
         let (event_tx, _) = broadcast::channel(64);
         let qm = Arc::new(Self {
-            database,
+            conn,
             tasks: Arc::new(RwLock::new(HashMap::new())),
             settings: Arc::new(RwLock::new(settings)),
             event_tx,
@@ -44,7 +46,15 @@ impl QueueManager {
     }
 
     fn load_history(&self) {
-        if let Ok(items) = self.database.get_all_downloads() {
+        let items_res = {
+            let conn_guard = match self.conn.lock() {
+                Ok(guard) => guard,
+                Err(_) => return,
+            };
+            downloads::select_all_downloads(&conn_guard)
+        };
+
+        if let Ok(items) = items_res {
             info!("Loaded {} items from database history", items.len());
             let mut tasks = self.tasks.write();
             let settings = self.settings.read().clone();
@@ -94,7 +104,13 @@ impl QueueManager {
             updated_at: now,
         };
 
-        let id = self.database.insert_download(&item)?;
+        let id = {
+            let conn = self
+                .conn
+                .lock()
+                .map_err(|_| DatabaseException::LockError("Poisoned DB mutex".into()))?;
+            downloads::insert_download(&conn, &item)?
+        };
 
         let task = Arc::new(DownloadTask::new(
             id,
@@ -105,18 +121,28 @@ impl QueueManager {
 
         let mut sub = task.subscribe();
         let event_tx_clone = self.event_tx.clone();
-        let db_clone = Arc::clone(&self.database);
+        let conn_clone = Arc::clone(&self.conn);
 
         crate::service::spawn(async move {
+            let mut last_saved = std::time::Instant::now();
             while let Ok(snap) = sub.recv().await {
                 let _ = event_tx_clone.send(snap.clone());
-                if snap.status == DownloadStatus::Completed || snap.status == DownloadStatus::Error {
-                    let _ = db_clone.update_progress(
-                        snap.id,
-                        snap.downloaded_bytes,
-                        snap.total_bytes,
-                        snap.status,
-                    );
+                let is_terminal = snap.status == DownloadStatus::Completed
+                    || snap.status == DownloadStatus::Error
+                    || snap.status == DownloadStatus::Paused;
+                let is_periodic = last_saved.elapsed().as_millis() >= 500;
+
+                if is_terminal || is_periodic {
+                    last_saved = std::time::Instant::now();
+                    if let Ok(conn) = conn_clone.lock() {
+                        let _ = downloads::update_download_progress(
+                            &conn,
+                            snap.id,
+                            snap.downloaded_bytes,
+                            snap.total_bytes,
+                            snap.status,
+                        );
+                    }
                 }
             }
         });
@@ -163,6 +189,22 @@ impl QueueManager {
     pub fn get_all_snapshots(&self) -> Vec<DownloadSnapshot> {
         QueueService::get_all_snapshots(self)
     }
+
+    pub fn save_segments(&self, download_id: DownloadId, segments_data: &[SegmentItem]) -> Result<()> {
+        let mut conn = self
+            .conn
+            .lock()
+            .map_err(|_| DatabaseException::LockError("Poisoned DB mutex".into()))?;
+        segments::save_segments(&mut conn, download_id, segments_data)
+    }
+
+    pub fn get_segments(&self, download_id: DownloadId) -> Result<Vec<SegmentItem>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| DatabaseException::LockError("Poisoned DB mutex".into()))?;
+        segments::select_segments_by_download_id(&conn, download_id)
+    }
 }
 
 impl QueueService for QueueManager {
@@ -173,7 +215,9 @@ impl QueueService for QueueManager {
     fn pause_download(&self, id: DownloadId) {
         if let Some(m) = self.tasks.read().get(&id) {
             m.task.pause();
-            let _ = self.database.update_status(id, DownloadStatus::Paused);
+            if let Ok(conn) = self.conn.lock() {
+                let _ = downloads::update_download_status(&conn, id, DownloadStatus::Paused);
+            }
         }
     }
 
@@ -181,7 +225,9 @@ impl QueueService for QueueManager {
         let task_opt = self.tasks.read().get(&id).map(|m| Arc::clone(&m.task));
         if let Some(task) = task_opt {
             task.resume();
-            let _ = self.database.update_status(id, DownloadStatus::Downloading);
+            if let Ok(conn) = self.conn.lock() {
+                let _ = downloads::update_download_status(&conn, id, DownloadStatus::Downloading);
+            }
 
             let task_clone = Arc::clone(&task);
             let handle = crate::service::spawn(async move {
@@ -202,14 +248,18 @@ impl QueueService for QueueManager {
                 let _ = std::fs::remove_file(&m.task.destination);
             }
         }
-        let _ = self.database.delete_download(id);
+        if let Ok(conn) = self.conn.lock() {
+            let _ = downloads::delete_download_by_id(&conn, id);
+        }
     }
 
     fn pause_all(&self) {
         let tasks = self.tasks.read();
         for m in tasks.values() {
             m.task.pause();
-            let _ = self.database.update_status(m.task.id, DownloadStatus::Paused);
+            if let Ok(conn) = self.conn.lock() {
+                let _ = downloads::update_download_status(&conn, m.task.id, DownloadStatus::Paused);
+            }
         }
     }
 

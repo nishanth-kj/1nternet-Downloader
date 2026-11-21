@@ -1,21 +1,229 @@
 use crate::config::Settings;
+use crate::config::{
+    MAX_CONNECTIONS, MAX_SEGMENTS_LIMIT, MIN_CONNECTIONS,
+    MIN_SPEED_WINDOW_SAMPLES, MIN_SPLIT_THRESHOLD_BYTES, PROGRESS_POLL_INTERVAL,
+    SLIDING_WINDOW_DURATION, SPEED_SAMPLE_INTERVAL_SECS, WORKER_RETRY_DELAY,
+};
 use crate::exception::{DownloadException, IdmException, Result, StorageException};
-use crate::model::{DownloadId, DownloadSnapshot, DownloadStatus};
-use crate::service::download::{DownloadService, DynamicScheduler, SpeedMeter};
+use crate::model::{DownloadId, DownloadSegment, DownloadSnapshot, DownloadStatus};
+use crate::service::download::{DownloadService, SchedulerService, SpeedMeterService};
 use crate::service::network::NetworkClient;
 use futures::StreamExt;
 use parking_lot::RwLock;
+use std::collections::VecDeque;
 use std::future::Future;
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::Instant;
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
+
+#[derive(Debug)]
+pub struct WorkerAssignment {
+    pub segment_id: u32,
+    pub resume_offset: u64,
+    pub end_offset: u64,
+}
+
+/// Dynamic Work-Stealing Segment Scheduler inspired by IDM
+pub struct DynamicScheduler {
+    pub total_bytes: u64,
+    pub segments: Vec<DownloadSegment>,
+    pub max_segments: usize,
+    next_segment_id: u32,
+}
+
+impl DynamicScheduler {
+    pub fn new(total_bytes: u64, initial_connections: usize) -> Self {
+        let n = initial_connections.clamp(MIN_CONNECTIONS, MAX_CONNECTIONS);
+        let mut segments = Vec::with_capacity(n);
+        let chunk_size = total_bytes / (n as u64);
+
+        for i in 0..n {
+            let start = (i as u64) * chunk_size;
+            let end = if i == n - 1 {
+                total_bytes - 1
+            } else {
+                start + chunk_size - 1
+            };
+
+            segments.push(DownloadSegment {
+                segment_id: i as u32,
+                start_offset: start,
+                end_offset: end,
+                downloaded_bytes: 0,
+                is_active: false,
+                is_completed: false,
+            });
+        }
+
+        Self {
+            total_bytes,
+            segments,
+            max_segments: MAX_SEGMENTS_LIMIT,
+            next_segment_id: n as u32,
+        }
+    }
+
+    /// Claim unworked segment or steal work from the largest remaining segment
+    pub fn request_work(&mut self) -> Option<WorkerAssignment> {
+        // 1. First priority: find an inactive, non-completed initial segment
+        for seg in self.segments.iter_mut() {
+            if !seg.is_active && !seg.is_completed {
+                seg.is_active = true;
+                return Some(WorkerAssignment {
+                    segment_id: seg.segment_id,
+                    resume_offset: seg.start_offset + seg.downloaded_bytes,
+                    end_offset: seg.end_offset,
+                });
+            }
+        }
+
+        // 2. Second priority: work-stealing dynamic split
+        if self.segments.len() >= self.max_segments {
+            return None;
+        }
+
+        let mut candidate_idx = None;
+        let mut max_remaining = 0;
+
+        for (idx, seg) in self.segments.iter().enumerate() {
+            if seg.is_active && !seg.is_completed {
+                let remaining = seg.remaining_bytes();
+                if remaining >= MIN_SPLIT_THRESHOLD_BYTES && remaining > max_remaining {
+                    max_remaining = remaining;
+                    candidate_idx = Some(idx);
+                }
+            }
+        }
+
+        let idx = candidate_idx?;
+        let half = max_remaining / 2;
+
+        let target_seg = &mut self.segments[idx];
+        let original_end = target_seg.end_offset;
+        let split_point = original_end - half;
+
+        // Clamp the existing segment
+        target_seg.end_offset = split_point;
+
+        // Allocate the new stolen segment
+        let new_id = self.next_segment_id;
+        self.next_segment_id += 1;
+
+        let new_seg = DownloadSegment {
+            segment_id: new_id,
+            start_offset: split_point + 1,
+            end_offset: original_end,
+            downloaded_bytes: 0,
+            is_active: true,
+            is_completed: false,
+        };
+
+        let assignment = WorkerAssignment {
+            segment_id: new_id,
+            resume_offset: split_point + 1,
+            end_offset: original_end,
+        };
+
+        self.segments.push(new_seg);
+        Some(assignment)
+    }
+
+    pub fn record_progress(&mut self, segment_id: u32, bytes_written: u64) {
+        if let Some(seg) = self.segments.iter_mut().find(|s| s.segment_id == segment_id) {
+            seg.downloaded_bytes += bytes_written;
+            if seg.downloaded_bytes >= seg.total_bytes() {
+                seg.is_completed = true;
+                seg.is_active = false;
+            }
+        }
+    }
+
+    pub fn is_all_completed(&self) -> bool {
+        self.segments.iter().all(|s| s.is_completed)
+    }
+
+    pub fn get_segments(&self) -> Vec<DownloadSegment> {
+        self.segments.clone()
+    }
+}
+
+impl SchedulerService for DynamicScheduler {
+    fn request_work(&mut self) -> Option<WorkerAssignment> {
+        self.request_work()
+    }
+
+    fn record_progress(&mut self, segment_id: u32, bytes_written: u64) {
+        self.record_progress(segment_id, bytes_written);
+    }
+
+    fn is_all_completed(&self) -> bool {
+        self.is_all_completed()
+    }
+
+    fn get_segments(&self) -> Vec<DownloadSegment> {
+        self.get_segments()
+    }
+}
+
+/// Rolling Speed Meter calculation using a sliding window
+pub struct SpeedMeter {
+    samples: VecDeque<(Instant, u64)>,
+    last_bytes: u64,
+}
+
+impl SpeedMeter {
+    pub fn new(initial_bytes: u64) -> Self {
+        let mut samples = VecDeque::with_capacity(16);
+        samples.push_back((Instant::now(), initial_bytes));
+        Self {
+            samples,
+            last_bytes: initial_bytes,
+        }
+    }
+
+    pub fn update(&mut self, current_bytes: u64) -> f64 {
+        let now = Instant::now();
+        self.samples.push_back((now, current_bytes));
+        self.last_bytes = current_bytes;
+
+        // Keep sliding window
+        while let Some(&(time, _)) = self.samples.front() {
+            if now.duration_since(time) > SLIDING_WINDOW_DURATION && self.samples.len() > MIN_SPEED_WINDOW_SAMPLES {
+                self.samples.pop_front();
+            } else {
+                break;
+            }
+        }
+
+        if self.samples.len() < MIN_SPEED_WINDOW_SAMPLES {
+            return 0.0;
+        }
+
+        let (first_time, first_bytes) = *self.samples.front().unwrap();
+        let (last_time, last_bytes) = *self.samples.back().unwrap();
+
+        let elapsed = last_time.duration_since(first_time).as_secs_f64();
+        if elapsed > SPEED_SAMPLE_INTERVAL_SECS {
+            let bytes_diff = (last_bytes.saturating_sub(first_bytes)) as f64;
+            (bytes_diff / elapsed).max(0.0)
+        } else {
+            0.0
+        }
+    }
+}
+
+impl SpeedMeterService for SpeedMeter {
+    fn update(&mut self, current_bytes: u64) -> f64 {
+        self.update(current_bytes)
+    }
+}
 
 pub struct DownloadTask {
     pub id: DownloadId,
@@ -166,7 +374,7 @@ impl DownloadTask {
 
     async fn run_segmented(&self, total_bytes: u64) -> Result<()> {
         let temp_path = self.destination.with_extension("idm_tmp");
-        let worker_count = (self.settings.max_segments as usize).clamp(2, 16);
+        let worker_count = (self.settings.max_segments as usize).clamp(MIN_CONNECTIONS, MAX_CONNECTIONS);
 
         let file = OpenOptions::new()
             .read(true)
@@ -217,7 +425,7 @@ impl DownloadTask {
                         Ok(s) => s,
                         Err(e) => {
                             warn!("Worker #{} range request failed: {}", worker_id, e);
-                            tokio::time::sleep(Duration::from_millis(500)).await;
+                            tokio::time::sleep(WORKER_RETRY_DELAY).await;
                             continue;
                         }
                     };
@@ -271,7 +479,7 @@ impl DownloadTask {
             if is_done || downloaded >= total_bytes {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(250)).await;
+            tokio::time::sleep(PROGRESS_POLL_INTERVAL).await;
         }
 
         for handle in worker_handles {

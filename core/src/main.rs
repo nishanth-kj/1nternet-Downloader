@@ -1,5 +1,4 @@
 use idm_lib::config::Config;
-use idm_lib::model::Database;
 use idm_lib::service::{decode_idr_url, get_runtime, spawn, windows, QueueManager};
 use idm_lib::ui::IcedApp;
 use std::sync::Arc;
@@ -52,21 +51,24 @@ fn main() -> anyhow::Result<()> {
 
     info!("Starting 1nternet Downloader (1IDM) — Native Rust + Iced Architecture");
 
-    // 4. Initialize Configuration & Persistence
+    // 4. Initialize Configuration & Persistence using database connection from utils
     let config = Config::load();
     let settings = config.get();
 
-    let database: Arc<dyn idm_lib::service::DatabaseService> =
-        Arc::new(Database::open_default().expect("Failed to open SQLite database"));
-    info!("Initialized SQLite database connection");
+    let db_conn = idm_lib::utils::connect_default_sqlite()
+        .expect("Failed to open SQLite connection from utils");
+    idm_lib::model::database::init_schema(&db_conn)
+        .expect("Failed to initialize database schema");
+    let conn = Arc::new(std::sync::Mutex::new(db_conn));
+    info!("Initialized SQLite database connection from utils and schema from model");
 
     // 5. Initialize Core Download Queue
-    let queue_manager = QueueManager::new(database, settings);
+    let queue_manager = QueueManager::new(conn, settings);
     info!("Initialized Core QueueManager and FIFO Scheduler");
 
     // 6. Start IPC Pipe Server to receive links from browser extensions
     let qm_ipc = Arc::clone(&queue_manager);
-    windows::start_server(move |url| {
+    windows::start_server(move |url: String| {
         let qm = Arc::clone(&qm_ipc);
         if let Some(clean_url) = decode_idr_url(&url) {
             info!("Received URL from IPC named pipe: {}", clean_url);

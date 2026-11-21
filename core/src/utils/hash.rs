@@ -1,3 +1,4 @@
+use crate::config::HASH_BUFFER_SIZE;
 use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::{Read, Result};
@@ -7,7 +8,7 @@ use std::path::Path;
 pub fn compute_sha256(path: &Path) -> Result<String> {
     let mut file = File::open(path)?;
     let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 64 * 1024];
+    let mut buffer = [0u8; HASH_BUFFER_SIZE];
 
     loop {
         let n = file.read(&mut buffer)?;
@@ -23,5 +24,5 @@ pub fn compute_sha256(path: &Path) -> Result<String> {
 
 /// Compute fast CRC-32 checksum of a memory slice
 pub fn compute_crc32(data: &[u8]) -> u32 {
-    crate::service::fast_c::fast_crc32(data)
+    crate::service::fast_crc32(data)
 }

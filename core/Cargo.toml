@@ -45,6 +45,7 @@ sha2 = "0.10"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tracing-appender = "0.2"
+diesel = { version = "2.4.0", features = ["sqlite"] }
 
 [build-dependencies]
 cc = "1.1"

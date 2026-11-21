@@ -1,5 +1,22 @@
+use crate::exception::{DatabaseException, Result};
 use crate::model::database::downloads::DownloadId;
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
+
+// -----------------------------------------------------------------------------
+// Diesel ORM Table Schema & Table Struct Definition
+// -----------------------------------------------------------------------------
+
+diesel::table! {
+    segments (download_id, segment_id) {
+        download_id -> BigInt,
+        segment_id -> Integer,
+        start_offset -> BigInt,
+        end_offset -> BigInt,
+        downloaded_bytes -> BigInt,
+        is_completed -> Integer,
+    }
+}
 
 /// Segments table ORM struct representing an active or completed dynamic segment
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -13,17 +30,8 @@ pub struct SegmentItem {
 }
 
 // -----------------------------------------------------------------------------
-// Native SQL Queries & Table Constants
+// Native SQL DDL & Query Functions
 // -----------------------------------------------------------------------------
-
-pub const TABLE_NAME: &str = "segments";
-
-pub const COL_DOWNLOAD_ID: &str = "download_id";
-pub const COL_SEGMENT_ID: &str = "segment_id";
-pub const COL_START_OFFSET: &str = "start_offset";
-pub const COL_END_OFFSET: &str = "end_offset";
-pub const COL_DOWNLOADED_BYTES: &str = "downloaded_bytes";
-pub const COL_IS_COMPLETED: &str = "is_completed";
 
 pub const CREATE_TABLE_SQL: &str = "
     CREATE TABLE IF NOT EXISTS segments (
@@ -38,20 +46,89 @@ pub const CREATE_TABLE_SQL: &str = "
     );
 ";
 
-pub const INSERT_OR_REPLACE_SQL: &str = "
-    INSERT OR REPLACE INTO segments (
-        download_id, segment_id, start_offset, end_offset, downloaded_bytes, is_completed
-    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6);
-";
+/// Native query function to batch-save segment items in a transaction
+pub fn save_segments(
+    conn: &mut Connection,
+    download_id: DownloadId,
+    segments: &[SegmentItem],
+) -> Result<()> {
+    let tx = conn
+        .transaction()
+        .map_err(|e| DatabaseException::Sqlite(format!("Failed to begin transaction: {}", e)))?;
 
-pub const SELECT_BY_DOWNLOAD_ID_SQL: &str = "
-    SELECT download_id, segment_id, start_offset, end_offset, downloaded_bytes, is_completed
-    FROM segments
-    WHERE download_id = ?1
-    ORDER BY segment_id ASC;
-";
+    {
+        let mut stmt = tx
+            .prepare_cached(
+                "INSERT OR REPLACE INTO segments (
+                    download_id, segment_id, start_offset, end_offset, downloaded_bytes, is_completed
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6);",
+            )
+            .map_err(|e| DatabaseException::Sqlite(format!("Prepare error: {}", e)))?;
 
-pub const DELETE_BY_DOWNLOAD_ID_SQL: &str = "
-    DELETE FROM segments
-    WHERE download_id = ?1;
-";
+        for seg in segments {
+            stmt.execute(params![
+                download_id,
+                seg.segment_id,
+                seg.start_offset as i64,
+                seg.end_offset as i64,
+                seg.downloaded_bytes as i64,
+                if seg.is_completed { 1 } else { 0 },
+            ])
+            .map_err(|e| DatabaseException::Sqlite(format!("Failed to save segment: {}", e)))?;
+        }
+    }
+
+    tx.commit()
+        .map_err(|e| DatabaseException::Sqlite(format!("Failed to commit segments: {}", e)))?;
+
+    Ok(())
+}
+
+/// Native query function to query all segments for a given download
+pub fn select_segments_by_download_id(
+    conn: &Connection,
+    download_id: DownloadId,
+) -> Result<Vec<SegmentItem>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT download_id, segment_id, start_offset, end_offset, downloaded_bytes, is_completed
+            FROM segments
+            WHERE download_id = ?1
+            ORDER BY segment_id ASC;",
+        )
+        .map_err(|e| DatabaseException::Sqlite(format!("Prepare error: {}", e)))?;
+
+    let rows = stmt
+        .query_map(params![download_id], |row| {
+            Ok(SegmentItem {
+                download_id: row.get(0)?,
+                segment_id: row.get(1)?,
+                start_offset: row.get::<_, i64>(2)?.max(0) as u64,
+                end_offset: row.get::<_, i64>(3)?.max(0) as u64,
+                downloaded_bytes: row.get::<_, i64>(4)?.max(0) as u64,
+                is_completed: row.get::<_, i32>(5)? == 1,
+            })
+        })
+        .map_err(|e| DatabaseException::Sqlite(format!("Query map error: {}", e)))?;
+
+    let mut items = Vec::new();
+    for r in rows {
+        if let Ok(seg) = r {
+            items.push(seg);
+        }
+    }
+    Ok(items)
+}
+
+/// Native query function to delete all segments for a download
+pub fn delete_segments_by_download_id(
+    conn: &Connection,
+    download_id: DownloadId,
+) -> Result<()> {
+    conn.execute(
+        "DELETE FROM segments WHERE download_id = ?1;",
+        params![download_id],
+    )
+    .map_err(|e| DatabaseException::Sqlite(format!("Failed to delete segments: {}", e)))?;
+    Ok(())
+}
