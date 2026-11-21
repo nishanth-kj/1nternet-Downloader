@@ -1,5 +1,5 @@
 use crate::exception::{DatabaseException, IdmException, Result};
-use crate::model::database::schema::{CREATE_DOWNLOADS_TABLE_SQL, CREATE_TORRENTS_TABLE_SQL};
+use crate::model::database::{downloads, segments, torrents};
 use crate::model::{DownloadId, DownloadItem, DownloadStatus};
 use crate::service::database::DatabaseService;
 use rusqlite::{params, Connection};
@@ -25,12 +25,15 @@ impl SqliteDatabaseService {
         let conn = Connection::open(&path_buf)
             .map_err(|e| DatabaseException::Sqlite(format!("Failed to open SQLite database: {}", e)))?;
 
-        // Initialize schema using schema definitions from model::database
-        conn.execute(CREATE_DOWNLOADS_TABLE_SQL, [])
+        // Initialize schemas using native DDL queries from each table model file
+        conn.execute(downloads::CREATE_TABLE_SQL, [])
             .map_err(|e| DatabaseException::Sqlite(format!("Failed to create downloads table: {}", e)))?;
 
-        conn.execute(CREATE_TORRENTS_TABLE_SQL, [])
+        conn.execute(torrents::CREATE_TABLE_SQL, [])
             .map_err(|e| DatabaseException::Sqlite(format!("Failed to create torrents table: {}", e)))?;
+
+        conn.execute(segments::CREATE_TABLE_SQL, [])
+            .map_err(|e| DatabaseException::Sqlite(format!("Failed to create segments table: {}", e)))?;
 
         info!("SQLite database service initialized at: {:?}", path_buf);
 
@@ -44,7 +47,13 @@ impl SqliteDatabaseService {
         DatabaseService::insert_download(self, item)
     }
 
-    pub fn update_progress(&self, id: DownloadId, downloaded_bytes: u64, total_bytes: u64, status: DownloadStatus) -> Result<()> {
+    pub fn update_progress(
+        &self,
+        id: DownloadId,
+        downloaded_bytes: u64,
+        total_bytes: u64,
+        status: DownloadStatus,
+    ) -> Result<()> {
         DatabaseService::update_progress(self, id, downloaded_bytes, total_bytes, status)
     }
 
@@ -71,12 +80,13 @@ impl SqliteDatabaseService {
 
 impl DatabaseService for SqliteDatabaseService {
     fn insert_download(&self, item: &DownloadItem) -> Result<DownloadId> {
-        let conn = self.conn.lock().map_err(|_| DatabaseException::LockError("Poisoned DB mutex".into()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| DatabaseException::LockError("Poisoned DB mutex".into()))?;
+
         conn.execute(
-            "INSERT INTO downloads (
-                url, destination, filename, total_bytes, downloaded_bytes,
-                status, mime_type, checksum, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            downloads::INSERT_SQL,
             params![
                 item.url,
                 item.destination,
@@ -103,10 +113,14 @@ impl DatabaseService for SqliteDatabaseService {
         total_bytes: u64,
         status: DownloadStatus,
     ) -> Result<()> {
-        let conn = self.conn.lock().map_err(|_| DatabaseException::LockError("Poisoned DB mutex".into()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| DatabaseException::LockError("Poisoned DB mutex".into()))?;
+
         let now = chrono::Utc::now().timestamp();
         conn.execute(
-            "UPDATE downloads SET downloaded_bytes = ?1, total_bytes = ?2, status = ?3, updated_at = ?4 WHERE downloads_id = ?5",
+            downloads::UPDATE_PROGRESS_SQL,
             params![downloaded_bytes as i64, total_bytes as i64, status.to_i32(), now, id],
         )
         .map_err(|e| DatabaseException::Sqlite(format!("Failed to update progress: {}", e)))?;
@@ -114,10 +128,14 @@ impl DatabaseService for SqliteDatabaseService {
     }
 
     fn update_status(&self, id: DownloadId, status: DownloadStatus) -> Result<()> {
-        let conn = self.conn.lock().map_err(|_| DatabaseException::LockError("Poisoned DB mutex".into()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| DatabaseException::LockError("Poisoned DB mutex".into()))?;
+
         let now = chrono::Utc::now().timestamp();
         conn.execute(
-            "UPDATE downloads SET status = ?1, updated_at = ?2 WHERE downloads_id = ?3",
+            downloads::UPDATE_STATUS_SQL,
             params![status.to_i32(), now, id],
         )
         .map_err(|e| DatabaseException::Sqlite(format!("Failed to update status: {}", e)))?;
@@ -125,20 +143,23 @@ impl DatabaseService for SqliteDatabaseService {
     }
 
     fn get_download(&self, id: DownloadId) -> Result<Option<DownloadItem>> {
-        let conn = self.conn.lock().map_err(|_| DatabaseException::LockError("Poisoned DB mutex".into()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| DatabaseException::LockError("Poisoned DB mutex".into()))?;
+
         let mut stmt = conn
-            .prepare(
-                "SELECT downloads_id, url, destination, filename, total_bytes, downloaded_bytes,
-                        status, mime_type, checksum, created_at, updated_at
-                 FROM downloads WHERE downloads_id = ?1",
-            )
+            .prepare(downloads::SELECT_BY_ID_SQL)
             .map_err(|e| DatabaseException::Sqlite(format!("Prepare error: {}", e)))?;
 
         let mut rows = stmt
             .query(params![id])
             .map_err(|e| DatabaseException::Sqlite(format!("Query error: {}", e)))?;
 
-        if let Some(row) = rows.next().map_err(|e| DatabaseException::Sqlite(format!("Row error: {}", e)))? {
+        if let Some(row) = rows
+            .next()
+            .map_err(|e| DatabaseException::Sqlite(format!("Row error: {}", e)))?
+        {
             let status_int: i32 = row.get(6).unwrap_or(0);
             let item = DownloadItem {
                 id: row.get(0).unwrap_or(0),
@@ -160,13 +181,13 @@ impl DatabaseService for SqliteDatabaseService {
     }
 
     fn get_all_downloads(&self) -> Result<Vec<DownloadItem>> {
-        let conn = self.conn.lock().map_err(|_| DatabaseException::LockError("Poisoned DB mutex".into()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| DatabaseException::LockError("Poisoned DB mutex".into()))?;
+
         let mut stmt = conn
-            .prepare(
-                "SELECT downloads_id, url, destination, filename, total_bytes, downloaded_bytes,
-                        status, mime_type, checksum, created_at, updated_at
-                 FROM downloads ORDER BY created_at DESC",
-            )
+            .prepare(downloads::SELECT_ALL_SQL)
             .map_err(|e| DatabaseException::Sqlite(format!("Prepare error: {}", e)))?;
 
         let rows = stmt
@@ -198,8 +219,12 @@ impl DatabaseService for SqliteDatabaseService {
     }
 
     fn delete_download(&self, id: DownloadId) -> Result<()> {
-        let conn = self.conn.lock().map_err(|_| DatabaseException::LockError("Poisoned DB mutex".into()))?;
-        conn.execute("DELETE FROM downloads WHERE downloads_id = ?1", params![id])
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| DatabaseException::LockError("Poisoned DB mutex".into()))?;
+
+        conn.execute(downloads::DELETE_BY_ID_SQL, params![id])
             .map_err(|e| DatabaseException::Sqlite(format!("Failed to delete download: {}", e)))?;
         Ok(())
     }
