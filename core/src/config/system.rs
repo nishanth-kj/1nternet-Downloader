@@ -1,5 +1,9 @@
 use std::time::Duration;
 
+pub const APP_VERSION: &str = env!("APP_VERSION");
+pub const APP_VERSION_CODE: &str = env!("APP_VERSION_CODE");
+pub const APP_SPRINT: &str = env!("APP_SPRINT");
+
 pub const DEFAULT_MAX_CONCURRENT_DOWNLOADS: u32 = 3;
 pub const DEFAULT_MAX_SEGMENTS: u32 = 8;
 pub const DEFAULT_MAX_RETRIES: u32 = 3;

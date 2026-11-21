@@ -78,6 +78,20 @@ Read `node_modules/next/dist/docs/` before using Next.js APIs (see `site/AGENTS.
 
 Each workflow uses path filters so site-only or Android-only PRs do not run the desktop or APK jobs.
 
+## Branching and Sprint Workflow
+
+- **Sprint Branches**: Active development takes place on `sprint_<version>` (e.g. `sprint_0.1.0`).
+- **Version Convention**: The root `.version` file is the single source of truth for versions across all components (`core/`, `android/`, etc.).
+  - Version format is `<MAJOR>.<MINOR>.<PATCH>`.
+  - **MAJOR is also the Sprint number** (e.g., in `0.1.0`, Major `0` corresponds to Sprint 0).
+  - Only `VERSION=<x.y.z>` remains active in `.version`; other fields (`VERSION_CODE`, `MAJOR`, `MINOR`, `PATCH`, `SPRINT`) remain commented.
+- **Feature Branches & PRs**:
+  - Always branch feature/bugfix branches off `sprint_<version>`.
+  - All PRs must target `sprint_<version>` (not `main`).
+- **Releases**:
+  - When ready to release, `sprint_<version>` is merged into `main`.
+  - GitHub releases and tags match the sprint version (e.g., `v0.1.0`).
+
 ## Release
 
 Work through [`docs/DOWNLOAD_CORRECTNESS_CHECKLIST.md`](../docs/DOWNLOAD_CORRECTNESS_CHECKLIST.md)

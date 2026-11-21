@@ -9,6 +9,25 @@ plugins {
 def vcpkgRoot = System.getenv("VCPKG_ROOT")
 def ndkHome = System.getenv("ANDROID_NDK_HOME") ?: "${System.getenv("ANDROID_HOME")}/ndk/27.0.12077973"
 
+// Load unified root .version file (single active VERSION, others optional/commented)
+def versionProps = new Properties()
+def versionFile = file("${rootDir}/../.version")
+if (versionFile.exists()) {
+    versionFile.withInputStream { versionProps.load(it) }
+}
+def appVersion = versionProps.getProperty("VERSION") ?: versionProps.getProperty("version") ?: "0.1.0"
+def appVersionCode = 1
+if (versionProps.getProperty("VERSION_CODE")) {
+    appVersionCode = versionProps.getProperty("VERSION_CODE").toInteger()
+} else {
+    def parts = appVersion.tokenize('.')
+    if (parts.size() >= 3) {
+        appVersionCode = parts[0].toInteger() * 10000 + parts[1].toInteger() * 100 + parts[2].toInteger()
+    } else if (parts.size() == 2) {
+        appVersionCode = parts[0].toInteger() * 10000 + parts[1].toInteger() * 100
+    }
+}
+
 android {
     namespace 'com.nishanth_kj.internetdownloader'
     compileSdk 34
@@ -18,8 +37,8 @@ android {
         applicationId "com.nishanth_kj.internetdownloader"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        versionCode appVersionCode
+        versionName appVersion
 
         // Only arm64-v8a for now: vcpkg's Android community triplets currently cover
         // arm64/arm/x86, but arm64-v8a is the only one this project has been built

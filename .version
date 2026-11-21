@@ -1,0 +1,13 @@
+# 1nternet Downloader Version Specification
+# Single active version for the entire repository.
+# Format: <MAJOR>.<MINOR>.<PATCH>
+# Note: MAJOR is also the Sprint number (Sprint <MAJOR>).
+VERSION=0.1.0
+
+# Optional detailed fields (commented out by default)
+# VERSION_CODE=1
+# VERSION_NAME=0.1.0
+# SPRINT=0
+# MAJOR=0
+# MINOR=1
+# PATCH=0
