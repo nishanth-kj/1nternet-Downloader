@@ -11,8 +11,9 @@ pub use exception::{
     Result, StorageException,
 };
 pub use model::{
-    Database, DownloadId, DownloadItem, DownloadSegment, DownloadSnapshot, DownloadStatus,
-    IdmError, OperationResult, TorrentItem,
+    AddDownloadRequest, AddTorrentRequest, Database, DownloadAction, DownloadActionRequest,
+    DownloadId, DownloadItem, DownloadSegment, DownloadSnapshot, DownloadStatus, IdmError,
+    TorrentItem, UpdateSettingsRequest,
 };
 pub use service::{
     decode_idr_url, fast_crc32, fast_is_all_zero, get_runtime, spawn, windows, DownloadTask,
@@ -190,5 +191,19 @@ mod tests {
         let idm_err: IdmException = net_err.into();
         assert!(matches!(idm_err, IdmException::Network(_)));
         assert_eq!(idm_err.to_string(), "Connection failed: Reset by peer");
+    }
+
+    #[test]
+    fn test_request_models() {
+        let req = AddDownloadRequest::new("https://example.com/test.iso");
+        assert_eq!(req.url, "https://example.com/test.iso");
+        assert!(req.auto_start);
+
+        let action = DownloadActionRequest {
+            id: 42,
+            action: DownloadAction::Pause,
+        };
+        assert_eq!(action.id, 42);
+        assert_eq!(action.action, DownloadAction::Pause);
     }
 }
