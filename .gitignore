@@ -60,6 +60,14 @@ node_modules/
 site/out/
 site/.next/
 
+# Rust
+target/
+**/target/
+**/target
+**/*.rs.bk
+*.idm_tmp
+*.previous
+
 # OS
 .DS_Store
 Thumbs.db
