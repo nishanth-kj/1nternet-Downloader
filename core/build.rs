@@ -17,11 +17,12 @@ fn main() {
             }
             if let Some((k, v)) = line.split_once('=') {
                 let key = k.trim().to_uppercase();
-                let val = v.trim().trim_matches('"').trim_matches('\'').to_string();
+                let raw_val = v.trim().trim_matches('"').trim_matches('\'');
+                let val = raw_val.rsplit_once('=').map(|(_, v)| v.trim()).unwrap_or(raw_val).to_string();
                 match key.as_str() {
                     "VERSION" => version = val,
                     "VERSION_CODE" => version_code = val,
-                    "SPRINT" => sprint = val,
+                    "SPRINT" | "MAJOR" => sprint = val,
                     _ => {}
                 }
             }

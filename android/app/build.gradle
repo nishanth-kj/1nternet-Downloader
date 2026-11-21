@@ -17,10 +17,12 @@ if (versionFile.exists()) {
 }
 def appVersion = versionProps.getProperty("VERSION") ?: versionProps.getProperty("version") ?: "0.1.0"
 def appVersionCode = 1
+def parts = appVersion.tokenize('.')
+def appSprintRaw = versionProps.getProperty("SPRINT") ?: versionProps.getProperty("MAJOR") ?: (parts.size() > 0 ? parts[0] : "0")
+def appSprint = appSprintRaw.contains('=') ? appSprintRaw.substring(appSprintRaw.lastIndexOf('=') + 1).trim() : appSprintRaw.trim()
 if (versionProps.getProperty("VERSION_CODE")) {
     appVersionCode = versionProps.getProperty("VERSION_CODE").toInteger()
 } else {
-    def parts = appVersion.tokenize('.')
     if (parts.size() >= 3) {
         appVersionCode = parts[0].toInteger() * 10000 + parts[1].toInteger() * 100 + parts[2].toInteger()
     } else if (parts.size() == 2) {
