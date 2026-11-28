@@ -237,6 +237,10 @@ pub struct DownloadTask {
     pub error_message: Arc<RwLock<Option<String>>>,
     pub client: NetworkClient,
     pub settings: Settings,
+    /// Last measured transfer rate (f64 bits) so polled snapshots keep the live speed.
+    live_speed_bits: Arc<AtomicU64>,
+    /// Last known segment layout so polled snapshots keep the connection map.
+    live_segments: Arc<RwLock<Vec<DownloadSegment>>>,
     snapshot_tx: broadcast::Sender<DownloadSnapshot>,
 }
 
@@ -268,6 +272,8 @@ impl DownloadTask {
             error_message: Arc::new(RwLock::new(None)),
             client,
             settings,
+            live_speed_bits: Arc::new(AtomicU64::new(0)),
+            live_segments: Arc::new(RwLock::new(Vec::new())),
             snapshot_tx,
         })
     }
@@ -281,6 +287,13 @@ impl DownloadTask {
         let downloaded = self.downloaded_bytes.load(Ordering::Relaxed);
         let status = *self.status.read();
         let error_message = self.error_message.read().clone();
+        let speed = if status == DownloadStatus::Downloading {
+            f64::from_bits(self.live_speed_bits.load(Ordering::Relaxed))
+        } else {
+            0.0
+        };
+        let segments = self.live_segments.read().clone();
+        let segment_count = segments.len().max(1);
 
         let mut snapshot = DownloadSnapshot {
             id: self.id,
@@ -289,10 +302,10 @@ impl DownloadTask {
             filename: self.filename.clone(),
             total_bytes: total,
             downloaded_bytes: downloaded,
-            speed_bytes_per_sec: 0.0,
+            speed_bytes_per_sec: speed,
             status,
-            segment_count: 1,
-            segments: Vec::new(),
+            segment_count,
+            segments,
             is_torrent: false,
             peers: 0,
             seeds: 0,
@@ -470,10 +483,10 @@ impl DownloadTask {
             let is_done = scheduler.lock().is_all_completed();
             let downloaded = self.downloaded_bytes.load(Ordering::Relaxed);
             let speed = speed_meter.update(downloaded);
+            self.live_speed_bits.store(speed.to_bits(), Ordering::Relaxed);
+            *self.live_segments.write() = scheduler.lock().get_segments();
 
-            let mut snap = self.get_snapshot();
-            snap.speed_bytes_per_sec = speed;
-            snap.segments = scheduler.lock().get_segments();
+            let snap = self.get_snapshot();
             let _ = self.snapshot_tx.send(snap);
 
             if is_done || downloaded >= total_bytes {
@@ -543,8 +556,8 @@ impl DownloadTask {
             let new_total = self.downloaded_bytes.fetch_add(chunk.len() as u64, Ordering::Relaxed) + chunk.len() as u64;
 
             let speed = speed_meter.update(new_total);
-            let mut snap = self.get_snapshot();
-            snap.speed_bytes_per_sec = speed;
+            self.live_speed_bits.store(speed.to_bits(), Ordering::Relaxed);
+            let snap = self.get_snapshot();
             let _ = self.snapshot_tx.send(snap);
         }
 

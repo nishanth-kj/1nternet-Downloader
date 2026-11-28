@@ -54,7 +54,7 @@ pub use r#impl::fast_c::{fast_crc32, fast_is_all_zero, FastCOps};
 pub use r#impl::ipc::{decode_idr_url, windows, WindowsIpcService};
 pub use r#impl::network::NetworkClient;
 pub use r#impl::queue::QueueManager;
-pub use r#impl::torrent::{TorrentManager, TorrentTask};
+pub use r#impl::torrent::{TorrentDetails, TorrentManager, TorrentTask, TrackerState};
 
 // Models and definitions
 pub use network::RemoteCapabilities;

@@ -97,7 +97,14 @@ fn main() -> anyhow::Result<()> {
     )
     .theme(IcedApp::theme)
     .subscription(IcedApp::subscription)
-    .window_size(iced::Size::new(1100.0, 720.0))
+    .window(iced::window::Settings {
+        // Close to IDM's default main window; fits 1366x768 and 1080p at 125% scaling.
+        size: iced::Size::new(1000.0, 620.0),
+        min_size: Some(iced::Size::new(820.0, 500.0)),
+        position: iced::window::Position::Centered,
+        icon: iced::window::icon::from_file_data(include_bytes!("../assets/icons/logo.png"), None).ok(),
+        ..Default::default()
+    })
     .run_with(move || IcedApp::new(qm_ui))?;
 
     info!("1IDM cleanly shut down");
