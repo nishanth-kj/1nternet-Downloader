@@ -16,14 +16,16 @@ it in `core/build.rs` and warns if `core/Cargo.toml` disagrees.
 
 | Workflow | What it does |
 | --- | --- |
-| `build-core.yml` | Checks all six extensions (syntax and drift), then builds the Windows app |
+| `build-core.yml` | Checks all six extensions (syntax and drift); builds and tests the Windows app |
 | `build-android.yml` | Cross-compiles curl and builds the APK |
 | `site-ci.yml`, `deploy-site.yml` | Website lint and build, then deploy to GitHub Pages |
 
-Path filters keep, for example, a website-only PR from building the apps.
+Path filters keep, for example, a website-only PR from building the apps. Every workflow
+runs for pushes and PRs on `main` and `sprint_*` branches.
 
-`build-core.yml` still builds `core/` with CMake from the old C++ app. It needs to move
-to `cargo build --release` (see the [roadmap](../roadmap.md)).
+`build-core.yml` has two jobs: a quick extension check (Linux), and the Windows build,
+which installs libtorrent with vcpkg (cached), runs `cargo build --release` and
+`cargo test`, and uploads `1idm.exe` with its three DLLs.
 
 ## Releases
 

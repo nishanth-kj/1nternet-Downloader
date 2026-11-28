@@ -9,9 +9,8 @@
   still builds and torrent adds report "torrent support isn't included in this build".
   `cargo build` prints a warning when this happens.
 
-To create the vcpkg tree, run `vcpkg install --triplet x64-windows` in `core/`. It
-reads `core/vcpkg.json`. That manifest still lists packages from the old C++ app; see
-[roadmap](../roadmap.md).
+To create the vcpkg tree once, run `./scripts/build.ps1 -InstallDeps` in `core/` (it runs
+`vcpkg install` with `core/vcpkg.json`, which lists only libtorrent).
 
 ## Commands
 
@@ -36,10 +35,9 @@ The version comes from the root `.version` file.
 ## Registering `idr://` (once per machine)
 
 ```powershell
-./scripts/register_protocol.ps1 -ExePath (Resolve-Path target\debug\1idm.exe)
+./scripts/register_protocol.ps1                                   # release build
+./scripts/register_protocol.ps1 -ExePath target\debug\1idm.exe   # debug build
 ```
-
-Pass `-ExePath` explicitly. The script's default path still points at the old C++ build.
 
 ## Where the app keeps its data
 
