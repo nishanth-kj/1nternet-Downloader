@@ -86,9 +86,14 @@ jobs:
         working-directory: core
         run: cargo build --release --locked
 
+      # Test executables can land outside the folders build.rs copies DLLs into, so put
+      # libtorrent's DLL folder on PATH for them.
       - name: Test
         working-directory: core
-        run: cargo test --locked
+        shell: pwsh
+        run: |
+          $env:PATH = "$PWD\vcpkg_installed\x64-windows\bin;$env:PATH"
+          cargo test --locked
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
