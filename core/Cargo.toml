@@ -47,6 +47,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tracing-appender = "0.2"
 diesel = { version = "2.4.0", features = ["sqlite"] }
 
+# System tray icon and decoding its PNG
+tray-icon = "0.25"
+image = { version = "0.24", default-features = false, features = ["png"] }
+
 [build-dependencies]
 cc = "1.1"
 embed-resource = "3.0"

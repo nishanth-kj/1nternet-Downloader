@@ -1,3 +1,6 @@
+// Release builds are GUI programs (no console window); debug keeps the console for logs.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use idm_lib::config::Config;
 use idm_lib::service::{decode_idr_url, get_runtime, spawn, windows, QueueManager};
 use idm_lib::ui::IcedApp;
@@ -102,6 +105,8 @@ fn main() -> anyhow::Result<()> {
         size: iced::Size::new(1000.0, 620.0),
         min_size: Some(iced::Size::new(820.0, 500.0)),
         position: iced::window::Position::Centered,
+        // The app decides what closing means (hide to tray or exit); see ui::app.
+        exit_on_close_request: false,
         icon: iced::window::icon::from_file_data(include_bytes!("../assets/icons/logo.png"), None).ok(),
         ..Default::default()
     })
