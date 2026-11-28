@@ -240,12 +240,17 @@ impl NetworkClient {
             .await
             .map_err(|e| IdmException::Network(NetworkException::ConnectionFailed(e.to_string())))?;
 
-        if resp.status() != reqwest::StatusCode::PARTIAL_CONTENT && resp.status() != reqwest::StatusCode::OK {
-            return Err(IdmException::Network(NetworkException::RangeNotSupported(format!(
-                "Unexpected status code for range request: {}",
-                resp.status()
-            ))));
+        // A ranged write is only safe when the server answers 206 with exactly the bytes
+        // we asked for. A 200 means it ignored Range and is sending the whole file.
+        if resp.status() != reqwest::StatusCode::PARTIAL_CONTENT {
+            return Err(http_error_or(resp.status(), || {
+                IdmException::Network(NetworkException::RangeNotSupported(format!(
+                    "server answered {} to a range request",
+                    resp.status()
+                )))
+            }));
         }
+        check_content_range(&resp, start, Some(end))?;
 
         let stream = resp.bytes_stream();
         Ok(futures::StreamExt::map(stream, |res| {
@@ -267,6 +272,24 @@ impl NetworkClient {
             .send()
             .await
             .map_err(|e| IdmException::Network(NetworkException::ConnectionFailed(e.to_string())))?;
+        let status = resp.status();
+        if !status.is_success() {
+            return Err(http_error_or(status, || {
+                IdmException::Network(NetworkException::HttpStatus {
+                    code: status.as_u16(),
+                    message: status.canonical_reason().unwrap_or("").to_string(),
+                })
+            }));
+        }
+        if resume_offset > 0 {
+            // 200 = the server ignored the resume offset; appending would corrupt the file.
+            if status != reqwest::StatusCode::PARTIAL_CONTENT {
+                return Err(IdmException::Network(NetworkException::RangeNotSupported(
+                    "server ignored the resume offset".into(),
+                )));
+            }
+            check_content_range(&resp, resume_offset, None)?;
+        }
         let content_len = resp.content_length();
         let stream = resp.bytes_stream();
         Ok((
@@ -275,6 +298,67 @@ impl NetworkClient {
                 res.map_err(|e| IdmException::Network(NetworkException::TransferInterrupted(e.to_string())))
             }),
         ))
+    }
+}
+
+/// Turns 4xx/5xx into an HttpStatus error; anything else uses `otherwise`.
+fn http_error_or(status: reqwest::StatusCode, otherwise: impl FnOnce() -> IdmException) -> IdmException {
+    if status.is_client_error() || status.is_server_error() {
+        IdmException::Network(NetworkException::HttpStatus {
+            code: status.as_u16(),
+            message: status.canonical_reason().unwrap_or("").to_string(),
+        })
+    } else {
+        otherwise()
+    }
+}
+
+/// Checks `Content-Range: bytes <start>-<end>/<total>` against what was requested.
+/// `end` = None accepts any end (open-ended resume request).
+fn check_content_range(resp: &reqwest::Response, start: u64, end: Option<u64>) -> Result<()> {
+    let header = resp
+        .headers()
+        .get(reqwest::header::CONTENT_RANGE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let parsed = parse_content_range(&header);
+    let ok = match (parsed, end) {
+        (Some((s, _)), None) => s == start,
+        (Some((s, e)), Some(want_end)) => s == start && e == want_end,
+        (None, _) => false,
+    };
+    if ok {
+        Ok(())
+    } else {
+        Err(IdmException::Network(NetworkException::InvalidContentRange {
+            expected: match end {
+                Some(e) => format!("bytes {}-{}", start, e),
+                None => format!("bytes {}-", start),
+            },
+            received: if header.is_empty() { "(none)".into() } else { header },
+        }))
+    }
+}
+
+/// "bytes 100-199/1000" -> Some((100, 199)).
+pub(crate) fn parse_content_range(v: &str) -> Option<(u64, u64)> {
+    let rest = v.trim().strip_prefix("bytes")?.trim_start();
+    let range = rest.split('/').next()?;
+    let (a, b) = range.split_once('-')?;
+    Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+}
+
+#[cfg(test)]
+mod range_tests {
+    use super::parse_content_range;
+
+    #[test]
+    fn parses_content_range() {
+        assert_eq!(parse_content_range("bytes 100-199/1000"), Some((100, 199)));
+        assert_eq!(parse_content_range("bytes 0-0/*"), Some((0, 0)));
+        assert_eq!(parse_content_range("bytes */1000"), None);
+        assert_eq!(parse_content_range(""), None);
     }
 }
 
