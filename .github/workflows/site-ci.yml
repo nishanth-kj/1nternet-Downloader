@@ -2,12 +2,12 @@ name: Website CI
 
 on:
   pull_request:
-    branches: [main, master]
+    branches: [main, master, "sprint_*"]
     paths:
       - "site/**"
       - ".github/workflows/site-ci.yml"
   push:
-    branches: [main, master]
+    branches: [main, master, "sprint_*"]
     paths:
       - "site/**"
       - ".github/workflows/site-ci.yml"

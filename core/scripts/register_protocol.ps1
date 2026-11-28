@@ -4,13 +4,14 @@
 # to when no native-messaging host is installed.
 #
 # Usage:
-#   ./scripts/register_protocol.ps1 [-ExePath <path to InternetDownloader.exe>] [-Uninstall]
+#   ./scripts/register_protocol.ps1 [-ExePath <path to 1idm.exe>] [-Uninstall]
 #
 # Run from a normal (non-elevated) PowerShell — this only writes to HKCU, so no
 # admin rights are required.
 
 param(
-    [string]$ExePath = (Join-Path $PSScriptRoot "..\out\build\x64-Debug\InternetDownloader.exe"),
+    # Defaults to the release build; pass -ExePath target\debug\1idm.exe for debug builds.
+    [string]$ExePath = (Join-Path $PSScriptRoot "..\target\release\1idm.exe"),
     [switch]$Uninstall
 )
 
@@ -28,7 +29,7 @@ if ($Uninstall) {
 
 $resolvedExe = Resolve-Path -Path $ExePath -ErrorAction SilentlyContinue
 if (-not $resolvedExe) {
-    Write-Error "Could not find InternetDownloader.exe at '$ExePath'. Build the project first, or pass -ExePath explicitly."
+    Write-Error "Could not find 1idm.exe at '$ExePath'. Build the project first, or pass -ExePath explicitly."
     exit 1
 }
 
