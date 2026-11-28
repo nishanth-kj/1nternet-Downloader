@@ -1,19 +1,9 @@
 {
   "name": "internet-downloader",
-  "version": "1.0.0",
-  "description": "A high-performance, modular C++ download manager.",
+  "version": "0.1.0",
+  "description": "Native dependencies for the Rust desktop app: libtorrent for the C++ torrent bridge.",
   "builtin-baseline": "94a541197763a4f449a1b91478df48c0584a6256",
   "dependencies": [
-    "wxwidgets",
-    {
-      "name": "curl",
-      "features": ["ssl", "http2"]
-    },
-    "zlib",
-    "sqlite3",
-    "sqlite-orm",
-    "spdlog",
-    "nlohmann-json",
     {
       "name": "libtorrent",
       "default-features": false
