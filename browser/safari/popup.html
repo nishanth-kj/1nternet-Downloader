@@ -12,7 +12,7 @@
       <img class="logo-icon" src="logo.svg" alt="1IDM" width="22" height="22">
       <span class="logo-title">1nternet Downloader</span>
     </div>
-    <span class="status-badge" id="appStatus">IDM Accelerated</span>
+    <span class="status-badge" id="appStatus">Ready</span>
   </div>
 
   <div class="content">
@@ -33,6 +33,27 @@
 
     <div class="divider"></div>
 
+    <div class="section-head">
+      <span class="input-label">Media on this page</span>
+      <span class="section-actions">
+        <button id="downloadPageMediaBtn" class="link-btn" title="Also list file links found in the page">Scan links</button>
+        <button id="clearMediaBtn" class="link-btn" title="Forget the media found in this tab">Clear</button>
+      </span>
+    </div>
+    <div id="mediaList" class="media-list">
+      <div class="media-empty">Loading…</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="toggle-group">
+      <label class="toggle-switch">
+        <input type="checkbox" id="videoButtonToggle">
+        <span class="slider"></span>
+      </label>
+      <span class="toggle-label">Show download button on videos</span>
+    </div>
+
     <div class="toggle-group">
       <label class="toggle-switch">
         <input type="checkbox" id="interceptToggle">
@@ -43,15 +64,16 @@
 
     <div class="toggle-group">
       <label class="toggle-switch">
-        <input type="checkbox" id="torrentToggle" checked>
+        <input type="checkbox" id="torrentToggle">
         <span class="slider"></span>
       </label>
       <span class="toggle-label">Capture Torrents & Magnet Links</span>
     </div>
 
-    <div class="quick-actions">
+    <div id="hiddenSites" class="hidden-sites"></div>
+
+    <div class="quick-actions single">
       <button id="openAppBtn" class="secondary-btn">Open Desktop App</button>
-      <button id="downloadPageMediaBtn" class="secondary-btn">Grab Page Media</button>
     </div>
   </div>
 

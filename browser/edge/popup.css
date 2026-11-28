@@ -42,8 +42,8 @@ body {
 
 .status-badge {
   font-size: 11px;
-  background-color: rgba(56, 189, 248, 0.15);
-  color: #38bdf8;
+  background-color: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
   padding: 3px 8px;
   border-radius: 9999px;
   font-weight: 500;
@@ -79,7 +79,7 @@ input[type="text"] {
 }
 
 input[type="text"]:focus {
-  border-color: #38bdf8;
+  border-color: #4ade80;
 }
 
 #pasteBtn {
@@ -101,7 +101,7 @@ input[type="text"]:focus {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  background: linear-gradient(135deg, #0284c7, #0369a1);
+  background: linear-gradient(135deg, #16a34a, #15803d);
   color: white;
   border: none;
   border-radius: 6px;
@@ -175,7 +175,7 @@ input[type="text"]:focus {
 }
 
 input:checked + .slider {
-  background-color: #0284c7;
+  background-color: #16a34a;
 }
 
 input:checked + .slider:before {
@@ -216,7 +216,7 @@ input:checked + .slider:before {
   bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
-  background-color: #0284c7;
+  background-color: #16a34a;
   color: white;
   padding: 6px 12px;
   border-radius: 4px;
@@ -231,3 +231,159 @@ input:checked + .slider:before {
   pointer-events: none;
 }
 
+
+/* ---- media on this page ---- */
+
+body {
+  width: 360px;
+}
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.section-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: #4ade80;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}
+
+.media-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 230px;
+  overflow-y: auto;
+}
+
+.media-empty {
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 6px 2px;
+}
+
+.media-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  align-items: center;
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.media-item.unsupported {
+  opacity: 0.65;
+}
+
+.media-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.media-meta {
+  font-size: 10.5px;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.media-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background-color: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+  margin-right: 4px;
+}
+
+.media-actions {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  display: flex;
+  gap: 4px;
+}
+
+.mini-btn {
+  background-color: #16a34a;
+  border: none;
+  color: white;
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.mini-btn.ghost {
+  background-color: transparent;
+  border: 1px solid #334155;
+  color: #cbd5e1;
+}
+
+.mini-btn:hover {
+  opacity: 0.9;
+}
+
+.mini-btn:disabled {
+  background-color: #334155;
+  color: #94a3b8;
+  cursor: default;
+}
+
+.hidden-sites {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.hidden-sites .link-btn {
+  margin-left: 6px;
+}
+
+.quick-actions.single {
+  grid-template-columns: 1fr;
+}
+
+/* ---- light mode: follows the browser / OS setting ---- */
+
+@media (prefers-color-scheme: light) {
+  body { background-color: #ffffff; color: #1b1f24; }
+  .header { border-bottom-color: #e2e8f0; }
+  .logo-title { color: #1b1f24; }
+  .status-badge { background-color: rgba(16, 124, 16, 0.12); color: #107c10; }
+  .input-label, .media-empty, .media-meta, .hidden-sites { color: #5f6770; }
+  input[type="text"], #pasteBtn { background-color: #f6f8fb; border-color: #c9ced6; color: #1b1f24; }
+  input[type="text"]:focus { border-color: #107c10; }
+  #pasteBtn:hover, .secondary-btn:hover { background-color: #e8f5e9; color: #1b1f24; }
+  .divider { background-color: #e2e8f0; }
+  .slider { background-color: #c9ced6; }
+  .toggle-label { color: #1b1f24; }
+  .secondary-btn { background-color: #f6f8fb; border-color: #c9ced6; color: #1b1f24; }
+  .link-btn { color: #107c10; }
+  .media-item { background-color: #f6f8fb; border-color: #dde2e8; }
+  .media-name { color: #1b1f24; }
+  .media-tag { background-color: rgba(16, 124, 16, 0.12); color: #107c10; }
+  .mini-btn { background-color: #107c10; }
+  .mini-btn.ghost { border-color: #c9ced6; color: #1b1f24; }
+  .mini-btn:disabled { background-color: #e6e9ee; color: #8a929c; }
+}
