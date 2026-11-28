@@ -1,0 +1,44 @@
+name: Bug report
+description: Something doesn't work as expected
+title: "fix: "
+labels: [bug]
+body:
+  - type: dropdown
+    id: product
+    attributes:
+      label: Product
+      options:
+        - Desktop app (core/)
+        - Browser extension (browser/)
+        - Android app (android/)
+        - Website (site/)
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Add http://…
+        2. Click Pause
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: "0.1.0 / sprint_0.1.0 @ abc1234"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: For the desktop app, the end of `%APPDATA%\InternetDownloader\logs\idr.log`. Remove personal URLs first.
+      render: text
