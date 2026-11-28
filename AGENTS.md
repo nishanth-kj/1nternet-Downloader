@@ -1,74 +1,62 @@
 # AGENTS.md
 
-Instructions for AI coding agents working in this repository. This is the canonical
-cross-tool file, and the only one: there is no `CLAUDE.md`. Detailed docs live in [`agents/`](agents/README.md).
+Instructions for AI coding agents in this repository. This is the only agent file
+(there is no `CLAUDE.md`). Full documentation is in [`docs/`](docs/README.md).
 
 ## What this is
 
-1nternet Downloader ("1IDM") is a download manager. The monorepo contains four
-independently built products:
+1nternet Downloader ("1IDM"), a download manager. Four products, built separately:
 
 | Folder | Product | Stack |
 | --- | --- | --- |
-| `core/` | **Flagship** Windows desktop app: segmented HTTP(S) and BitTorrent | C++17, wxWidgets, libcurl, libtorrent-rasterbar 2.x, sqlite_orm, spdlog, nlohmann_json, vcpkg, CMake |
-| `android/` | Android app with its own native engine | Java UI + C++ JNI, static libcurl, Gradle 8.9, NDK 27 |
-| `browser/` | MV3 extensions (Chrome, Edge, Brave, Opera, Firefox, Safari) handing links to the app via `idr://` | Vanilla JS, no build step |
-| `site/` | Marketing/docs site on GitHub Pages | Next.js 16, React 19, Tailwind 4 |
+| `core/` | Windows desktop app | Rust, Iced, Tokio, reqwest, SQLite; libtorrent through a C++ bridge |
+| `android/` | Android app | Java UI, C++ engine over JNI (libcurl), libtorrent4j |
+| `browser/` | Browser extension (six copies) | Manifest V3, plain JS, no build step |
+| `site/` | Website | Next.js, React, Tailwind |
 
-Each component folder has its own `AGENTS.md` with component rules.
+Each folder has its own `AGENTS.md` with its rules.
 
-## Read before changing code
+## Read first
 
-- [agents/PROJECT_SPEC.md](agents/PROJECT_SPEC.md): requirements and scope.
-- [agents/DESIGN.md](agents/DESIGN.md): architecture, threading, state machine, persistence.
-- [agents/CONVENTIONS.md](agents/CONVENTIONS.md): **hard invariants** and style.
-- [agents/WORKFLOWS.md](agents/WORKFLOWS.md): build, verify and release commands.
-- [agents/ROADMAP.md](agents/ROADMAP.md): known gaps.
+- [docs/overview.md](docs/overview.md): how the products connect
+- [docs/contributing/conventions.md](docs/contributing/conventions.md): rules that must not be broken
+- [docs/contributing/testing.md](docs/contributing/testing.md): how to verify a change
+- [docs/roadmap.md](docs/roadmap.md): known bugs and planned work
 
 ## Commands
 
 ```powershell
-cd core; ./scripts/build.ps1          # Windows desktop (finds vcpkg via VCPKG_ROOT, C:\vcpkg, or VS-bundled)
+cd core; cargo build; cargo test; cargo run         # desktop
 ```
 
 ```bash
-cd android && ./gradlew assembleDebug  # needs NDK 27.0.12077973, JDK <= 21, local.properties
-cd site && npm ci && npm run lint && npm run build
-node --check browser/<browser>/background.js   # extensions have no build step
+cd android && ./gradlew assembleDebug               # NDK 27.0.12077973, JDK 17-21
+cd site && npm ci && npm run lint && npm run build  # website
+node --check browser/<name>/background.js           # extension (also popup.js, content.js)
 ```
 
-## Verification is mandatory
+## Most important rules
 
-There is no automated test suite, and a successful compile proves nothing about
-downloads. After touching `core/src/service/`, build and run the end-to-end check
-in [`core/tests/e2e/README.md`](core/tests/e2e/README.md), then compare SHA-256s. In
-your summary, say what you verified and what you didn't.
+1. Never write download bytes before validating the response (`206` and the exact
+   `Content-Range` for ranges). Never mark Completed without checking the size on disk.
+2. libtorrent headers only in `core/cpp/torrent_manager.cpp` and `torrent_metainfo.cpp`.
+   Rust calls the C API in `cpp/torrent_c_api.h`. No hand-written BitTorrent code.
+3. Runtime data lives in `%APPDATA%\InternetDownloader\`, never in the working directory
+   or the repository.
+4. The UI thread never blocks; engine work runs on the Tokio runtime.
+5. Edit `browser/chrome/` first, then sync the other five copies; CI fails on drift.
+6. Android's vcpkg triplet stays at API 24.
 
-## Top invariants (full list in agents/CONVENTIONS.md)
+## Verify, then report
 
-1. libtorrent headers only in `core/src/service/torrent/torrent_{manager,metainfo}.cpp`
-   (the pimpl in `manager.h`). No hand-rolled BitTorrent or bencode code.
-2. All HTTP goes through `idr::network::HttpClient`. Never write a response byte
-   before it is validated (206 + exact `Content-Range` for ranges).
-3. `MyApp::OnInitCmdLine` in `core/main.cpp` must keep the optional `url` param, or
-   the `idr://` handoff silently breaks.
-4. Engine threads are owned and joined, never detached. Status callbacks must not
-   lock `DownloadManager::m_mutex`.
-5. Runtime data lives in `%APPDATA%\InternetDownloader\`, never in the CWD.
-6. The six `browser/*` copies must stay in sync (CI enforces this). Edit `chrome/` first.
-7. Android's vcpkg triplet stays at API 24. Android has no torrent support by design.
+A build that compiles proves nothing about downloads. After changing `core/src/service/`
+or `core/cpp/`, run the manual check in [testing.md](docs/contributing/testing.md). Test
+with a scratch `APPDATA` so you don't touch the owner's downloads, and close the owner's
+running copy first only if they agree (a second launch hands its URL to the first).
 
-## Don't touch without asking
+In your summary, say what you verified and what you didn't.
 
-`core/tests/*` and `plugins/` (reserved),
-`core/src/utils/database/database.h` (intentional placeholder), and `LICENSE` (non-commercial).
+## Ask before changing
 
-## Local run notes
-
-- Use PowerShell for `core/scripts/*.ps1`. In Git Bash, use `cygpath -w` when you hand
-  paths to Windows programs.
-- Before running the desktop app for verification, point `downloadDir` in
-  `%APPDATA%\InternetDownloader\settings.json` at a scratch folder. Write that JSON
-  with Node rather than hand-escaping backslashes. Afterwards kill the app
-  (`taskkill //IM InternetDownloader.exe //F`) and delete the test data.
-- The repository root must stay free of runtime data such as `downloads.db`.
+`core/tests/*`, `plugins/`, `LICENSE` (non-commercial), and the generated block in
+`site/AGENTS.md`.

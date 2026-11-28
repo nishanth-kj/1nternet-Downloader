@@ -1,42 +1,37 @@
-# core/ — Windows desktop app
+# core/ — Windows desktop app (Rust)
 
-Design: [../agents/DESIGN.md](../agents/DESIGN.md) · Invariants: [../agents/CONVENTIONS.md](../agents/CONVENTIONS.md)
+Docs: [building](../docs/desktop/building.md) · [architecture](../docs/desktop/architecture.md) ·
+[UI](../docs/desktop/ui.md) · [torrents](../docs/desktop/torrents.md)
 
-## Build and run
+## Commands
 
 ```powershell
-./scripts/build.ps1                  # Debug → build/Debug/InternetDownloader.exe
-./scripts/build.ps1 -Clean           # after a vcpkg or toolchain change
-./scripts/register_protocol.ps1      # once per machine: register idr://
+cargo build      # also compiles c/, cpp/ (libtorrent bridge) and app.rc
+cargo test
+cargo run        # close any running copy first, or URLs are forwarded to it
+cargo check      # when the exe is locked by a running copy
 ```
-
-Sources are globbed (`file(GLOB_RECURSE src/*.cpp)`), so re-run the configure step
-after you add or remove files. The project compiles at `/W4`; keep its own code
-warning-free.
 
 ## Where things live
 
-- `main.cpp`: wx entry point, `idr://` parsing, single-instance handoff.
-- `src/gui/`: `MainWindow` (polls the manager every 500 ms and calls
-  `ProcessQueue()`), `SettingsDialog`, tray icon.
-- `src/service/download/`: `Download` (probe → segments or single stream, retries,
-  assembly, torrent polling), `DownloadManager` (list, queue, SQLite sync),
-  `SpeedMeter`.
-- `src/service/network/`: `HttpClient::Head/Get(req, onData, validator)` over
-  `CurlHandle`.
-- `src/service/torrent/`: libtorrent wrapper (pimpl). This is the **only** place
-  libtorrent headers may appear.
-- `src/model/sqlite_download_model.h`: the real DB layer. `src/utils/database/` is
-  an unused placeholder.
-- `src/utils/system/`: `Config`/`Settings`, `AppDataDir()`, `Log()`, IPC.
-  `src/utils/checksum.*` is SHA-256 via bcrypt.
+- `src/main.rs`: startup, `idr://` argument, single instance, logging, launches the UI.
+- `src/service/impl/`: `network.rs` (HTTP), `download.rs` (segmented engine),
+  `queue.rs` (list, persistence, torrents), `torrent.rs` (libtorrent FFI), `ipc.rs`.
+- `src/model/database/`: SQLite tables with their SQL.
+- `src/ui/`: `app.rs` (state and messages), `view.rs` (main window), `dialogs.rs`,
+  `prefs.rs`, `theme.rs`, `format.rs`.
+- `cpp/`: libtorrent bridge. `c/`: small C helpers.
 
-## Rules specific to this folder
+## Rules for this folder
 
-- Read the "Hard invariants" in `agents/CONVENTIONS.md` before you edit
-  `download.cpp`, `manager.cpp` or `main.cpp`.
-- Use `(std::max)`/`(std::min)` wherever `<windows.h>` may be included.
-- Never call `curl_easy_*` outside `src/service/network/`.
-- After engine changes, run `tests/e2e/README.md` and compare SHA-256s; a compile
-  alone doesn't count as verification.
-- Runtime files: `%APPDATA%\InternetDownloader\{downloads.db,settings.json,logs\idr.log}`.
+- Keep the build warning-free.
+- Torrent code: libtorrent headers only in `cpp/torrent_manager.cpp`; every C API
+  function catches all exceptions; keep the `CTorrentSnapshot` layouts identical in C++
+  and Rust; keep the libtorrent defines in `build.rs` matching vcpkg's.
+- UI: user settings go in Options, not the View menu. The accent colour is only for
+  download progress. Reuse the style helpers in `view.rs`.
+- Changing `DownloadSnapshot` fields breaks `tests/` (owner approval needed).
+- After engine changes, run the manual check in
+  [testing.md](../docs/contributing/testing.md) with a scratch `APPDATA`.
+- Ignore `CMakeLists.txt`, `CMakePresets.json`, `scripts/build.ps1` and `build/`; they
+  belong to the old C++ app.
