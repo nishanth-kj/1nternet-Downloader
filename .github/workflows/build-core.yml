@@ -37,9 +37,11 @@ jobs:
           for b in chrome edge brave opera firefox safari; do
             node --check "browser/$b/background.js"
             node --check "browser/$b/popup.js"
+            node --check "browser/$b/content.js"
           done
           for b in edge brave opera firefox safari; do
             cmp browser/chrome/popup.js "browser/$b/popup.js"
+            cmp browser/chrome/content.js "browser/$b/content.js"
             diff <(grep -v '^//' browser/chrome/background.js) <(grep -v '^//' "browser/$b/background.js")
           done
 
