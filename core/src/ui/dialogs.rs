@@ -305,6 +305,14 @@ impl IcedApp {
                     .on_toggle(Message::OptConfirmRemove)
                     .size(13)
                     .text_size(11.5),
+                checkbox("Keep running in the system tray when the window is closed", o.close_to_tray)
+                    .on_toggle(Message::OptCloseToTray)
+                    .size(14)
+                    .text_size(12),
+                checkbox("Start minimized to the tray", o.start_minimized)
+                    .on_toggle(Message::OptStartMinimized)
+                    .size(14)
+                    .text_size(12),
                 checkbox("Start 1nternet Downloader when I sign in to Windows", o.start_with_windows)
                     .on_toggle(Message::OptStartWithWindows)
                     .size(13)

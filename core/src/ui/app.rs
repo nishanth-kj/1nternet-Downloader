@@ -11,6 +11,7 @@ use crate::ui::prefs::{Column, UiPrefs};
 use crate::ui::theme::{Accent, Palette, ThemeMode};
 use crate::ui::torrent_ui::{CreateTorrentForm, FilePriority, PieceSize, TorrentDraft, TorrentOpt, TorrentTab};
 use crate::service::TorrentDetails;
+use crate::ui::tray::{Tray, TrayAction};
 use iced::keyboard::{self, key::Named, Key, Modifiers};
 use iced::widget::{text_editor, text_input};
 use iced::{event, mouse, window, Event, Point, Subscription, Task, Theme};
@@ -139,6 +140,8 @@ pub struct OptionsDraft {
     pub open_folder_when_done: bool,
     pub confirm_remove: bool,
     pub start_with_windows: bool,
+    pub close_to_tray: bool,
+    pub start_minimized: bool,
     pub show_complete_dialog: bool,
     pub monitor_clipboard: bool,
     pub error: Option<String>,
@@ -225,6 +228,10 @@ pub enum Message {
     OptOpenFolderDone(bool),
     OptConfirmRemove(bool),
     OptStartWithWindows(bool),
+    OptCloseToTray(bool),
+    OptStartMinimized(bool),
+    WindowCloseRequested(window::Id),
+    ShowWindow,
     OptShowComplete(bool),
     OptMonitorClipboard(bool),
     SaveOptions,
@@ -299,6 +306,8 @@ pub struct IcedApp {
     pub(super) tracker_input: String,
     pub(super) create_form: CreateTorrentForm,
     pub(super) torrent_draft: TorrentDraft,
+    tray: Option<Tray>,
+    window_hidden: bool,
 }
 
 pub(super) fn search_input_id() -> text_input::Id {
@@ -357,6 +366,8 @@ impl IcedApp {
             tracker_input: String::new(),
             create_form: CreateTorrentForm::default(),
             torrent_draft: TorrentDraft::from_settings(crate::config::TorrentSettings::default()),
+            tray: None,
+            window_hidden: false,
         };
         app.apply_theme();
         let snaps = app.queue_manager.get_all_snapshots();
@@ -364,7 +375,14 @@ impl IcedApp {
         app.started = true;
         let dark = app.resolved_theme == ThemeMode::Dark;
         app.title_bar_dark = Some(dark);
-        (app, sync_title_bar(dark))
+        app.tray = Tray::new();
+        tracing::info!("System tray icon: {}", if app.tray.is_some() { "ready" } else { "unavailable" });
+        let mut startup = vec![sync_title_bar(dark)];
+        if app.prefs.start_minimized && app.tray.is_some() {
+            app.window_hidden = true;
+            startup.push(set_window_hidden(true));
+        }
+        (app, Task::batch(startup))
     }
 
     pub fn title(&self) -> String {
@@ -547,6 +565,30 @@ impl IcedApp {
             Message::Tick => {
                 let snaps = self.queue_manager.get_all_snapshots();
                 self.ingest(snaps);
+                let tooltip = self.title();
+                let actions = match self.tray.as_mut() {
+                    Some(t) => {
+                        t.set_tooltip(&tooltip);
+                        t.poll()
+                    }
+                    None => Vec::new(),
+                };
+                if !actions.is_empty() {
+                    let mut tasks = Vec::new();
+                    for act in actions {
+                        tasks.push(match act {
+                            TrayAction::Show => self.update_inner(Message::ShowWindow),
+                            TrayAction::AddUrl => Task::batch([
+                                self.update_inner(Message::ShowWindow),
+                                self.update_inner(Message::OpenAddDialog),
+                            ]),
+                            TrayAction::PauseAll => self.update_inner(Message::PauseAll),
+                            TrayAction::ResumeAll => self.update_inner(Message::ResumeAll),
+                            TrayAction::Exit => self.update_inner(Message::Exit),
+                        });
+                    }
+                    return Task::batch(tasks);
+                }
                 // Follow Windows light/dark changes (checked every ~5 s).
                 self.ticks = self.ticks.wrapping_add(1);
                 if self.prefs.theme == ThemeMode::System && self.ticks % 20 == 0 {
@@ -963,6 +1005,8 @@ impl IcedApp {
                     open_folder_when_done: self.prefs.open_folder_when_done,
                     confirm_remove: self.prefs.confirm_remove,
                     start_with_windows: startup::is_enabled(),
+                    close_to_tray: self.prefs.close_to_tray,
+                    start_minimized: self.prefs.start_minimized,
                     show_complete_dialog: self.prefs.show_complete_dialog,
                     monitor_clipboard: self.prefs.monitor_clipboard,
                     error: None,
@@ -1000,6 +1044,8 @@ impl IcedApp {
             Message::OptOpenFolderDone(b) => self.options.open_folder_when_done = b,
             Message::OptConfirmRemove(b) => self.options.confirm_remove = b,
             Message::OptStartWithWindows(b) => self.options.start_with_windows = b,
+            Message::OptCloseToTray(b) => self.options.close_to_tray = b,
+            Message::OptStartMinimized(b) => self.options.start_minimized = b,
             Message::OptShowComplete(b) => self.options.show_complete_dialog = b,
             Message::OptMonitorClipboard(b) => self.options.monitor_clipboard = b,
             Message::SaveOptions => match self.options_to_settings().and_then(|s| self.torrent_draft.to_settings().map(|t| (s, t))) {
@@ -1022,6 +1068,8 @@ impl IcedApp {
                     self.prefs.open_folder_when_done = self.options.open_folder_when_done;
                     self.prefs.confirm_remove = self.options.confirm_remove;
                     self.prefs.show_complete_dialog = self.options.show_complete_dialog;
+                    self.prefs.close_to_tray = self.options.close_to_tray;
+                    self.prefs.start_minimized = self.options.start_minimized;
                     if self.options.monitor_clipboard && !self.prefs.monitor_clipboard {
                         self.clip_baseline = false;
                     }
@@ -1187,7 +1235,24 @@ impl IcedApp {
                 self.dialog = None;
                 self.close_overlays();
             }
-            Message::Exit => return iced::exit(),
+            Message::WindowCloseRequested(id) => {
+                tracing::info!("Close requested for window {:?} (close to tray: {})", id, self.prefs.close_to_tray);
+                if self.prefs.close_to_tray && self.tray.is_some() {
+                    self.close_overlays();
+                    self.window_hidden = true;
+                    return set_window_hidden(true);
+                }
+                return self.update_inner(Message::Exit);
+            }
+            Message::ShowWindow => {
+                self.window_hidden = false;
+                return set_window_hidden(false);
+            }
+            Message::Exit => {
+                // Keep torrents' progress for the next start.
+                self.queue_manager.save_torrent_state();
+                return iced::exit();
+            }
         }
         Task::none()
     }
@@ -1298,6 +1363,7 @@ impl IcedApp {
                 }),
             ),
             event::listen_with(on_event),
+            window::close_requests().map(Message::WindowCloseRequested),
         ])
     }
 }
@@ -1317,6 +1383,17 @@ fn on_event(event: Event, status: event::Status, _window: window::Id) -> Option<
         }
         _ => None,
     }
+}
+
+/// Hides the window (it stays in the tray) or brings it back to the front.
+fn set_window_hidden(hidden: bool) -> Task<Message> {
+    iced::window::get_latest().and_then(move |id| {
+        if hidden {
+            window::change_mode(id, window::Mode::Hidden)
+        } else {
+            Task::batch([window::change_mode(id, window::Mode::Windowed), window::gain_focus(id)])
+        }
+    })
 }
 
 /// Makes the native title bar dark or light to match the app (Windows 10 1809+ / 11).

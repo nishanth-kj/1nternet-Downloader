@@ -107,6 +107,10 @@ pub struct UiPrefs {
     pub show_complete_dialog: bool,
     /// Offer to download links copied to the clipboard.
     pub monitor_clipboard: bool,
+    /// Closing the window hides it to the system tray; downloads keep running.
+    pub close_to_tray: bool,
+    /// Start with the window hidden in the tray.
+    pub start_minimized: bool,
 }
 
 impl Default for UiPrefs {
@@ -135,6 +139,8 @@ impl Default for UiPrefs {
             progress_details: false,
             show_complete_dialog: true,
             monitor_clipboard: false,
+            close_to_tray: true,
+            start_minimized: false,
         }
     }
 }

@@ -38,11 +38,22 @@ menu bar, toolbar, category tree, sortable list, details pane and status bar.
 - **System** theme reads Windows' `AppsUseLightTheme` every ~5 s. The title bar follows
   through `DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE)`.
 
+## System tray
+
+`tray.rs` adds a tray icon (tooltip shows the live speed) with Show, Add URL, Resume all,
+Pause all and Exit. Closing the window hides it to the tray while downloads continue
+(Options › General: "Keep running in the system tray", default on; "Start minimized
+to the tray"). The window is created with `exit_on_close_request: false` in
+`main.rs`, and `IcedApp` handles `window::close_requests()`. Exit (menu or tray) saves
+torrent fast-resume data first. Release builds use the Windows GUI subsystem, so no
+console window opens.
+
 ## Saved preferences (`ui.json`)
 
 Theme, accent, visible columns, sort column and direction, category and details panes,
 category subfolders, download window on start, download window details, "Download
-complete" dialog, ask-before-remove, and clipboard monitoring. Start-with-Windows is a
+complete" dialog, ask-before-remove, clipboard monitoring, close to tray and start
+minimized. Start-with-Windows is a
 value under `HKCU\…\Run`, not in `ui.json`.
 
 ## Shortcuts
