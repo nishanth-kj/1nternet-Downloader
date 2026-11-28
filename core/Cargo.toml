@@ -49,6 +49,7 @@ diesel = { version = "2.4.0", features = ["sqlite"] }
 
 [build-dependencies]
 cc = "1.1"
+embed-resource = "3.0"
 
 [profile.dev]
 debug = false

@@ -1,4 +1,3 @@
-// Windows resource script: embeds the app icon into InternetDownloader.exe (shown in
-// Explorer, the taskbar, and Alt-Tab) and makes it loadable at runtime by name via
-// wxIcon(wxICON(IDI_ICON1)) in main_window.cpp / tray_icon.cpp.
+// Windows resource script: embeds the app icon into 1idm.exe (shown in Explorer, the
+// taskbar and Alt-Tab). Compiled by build.rs through the embed-resource crate.
 IDI_ICON1 ICON "assets/icons/app.ico"
