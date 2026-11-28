@@ -2,13 +2,13 @@ name: Build Windows App
 
 on:
   push:
-    branches: [main, master, "feat/**"]
+    branches: [main, master, "sprint_*", "feat/**"]
     paths:
       - "core/**"
       - "browser/**"
       - ".github/workflows/build-core.yml"
   pull_request:
-    branches: [main, master]
+    branches: [main, master, "sprint_*"]
     paths:
       - "core/**"
       - "browser/**"
@@ -18,20 +18,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-env:
-  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  CMAKE_BUILD_PARALLEL_LEVEL: 4
-
 jobs:
-  build-windows:
-    name: Build Windows (x64)
-    runs-on: windows-latest
-
+  extensions:
+    name: Browser extensions (syntax and sync)
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Validate browser extensions
+      - name: Check every copy and their drift
         shell: bash
         run: |
           for b in chrome edge brave opera firefox safari; do
@@ -42,8 +37,27 @@ jobs:
           for b in edge brave opera firefox safari; do
             cmp browser/chrome/popup.js "browser/$b/popup.js"
             cmp browser/chrome/content.js "browser/$b/content.js"
+            cmp browser/chrome/popup.html "browser/$b/popup.html"
+            cmp browser/chrome/popup.css "browser/$b/popup.css"
             diff <(grep -v '^//' browser/chrome/background.js) <(grep -v '^//' "browser/$b/background.js")
           done
+
+  build-windows:
+    name: Build Windows (x64)
+    runs-on: windows-latest
+    env:
+      VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
 
       - name: Export GitHub Actions cache for vcpkg
         uses: actions/github-script@v9
@@ -58,22 +72,30 @@ jobs:
           vcpkgDirectory: ${{ runner.workspace }}/vcpkg
           vcpkgGitCommitId: 94a541197763a4f449a1b91478df48c0584a6256
 
-      - name: Setup MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Configure CMake
+      # Only libtorrent is needed (core/vcpkg.json). build.rs reads it from
+      # core/vcpkg_installed/x64-windows and copies the runtime DLLs.
+      - name: Install libtorrent
+        shell: pwsh
         run: |
-          cmake -S core -B core/out -G "Ninja Multi-Config" `
-            -DCMAKE_TOOLCHAIN_FILE="${{ runner.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" `
-            -DVCPKG_INSTALLED_DIR="${{ github.workspace }}/core/vcpkg_installed"
+          & "$env:VCPKG_ROOT/vcpkg" install `
+            --x-manifest-root=core `
+            --x-install-root=core/vcpkg_installed `
+            --triplet x64-windows
 
-      - name: Build Application
-        run: cmake --build core/out --config Release --parallel
+      - name: Build (release)
+        working-directory: core
+        run: cargo build --release --locked
+
+      - name: Test
+        working-directory: core
+        run: cargo test --locked
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
-          name: InternetDownloader-Windows-x64
+          name: 1nternet-Downloader-Windows-x64
           path: |
-            core/out/Release/InternetDownloader.exe
-            core/out/Release/*.dll
+            core/target/release/1idm.exe
+            core/target/release/torrent-rasterbar.dll
+            core/target/release/libssl-3-x64.dll
+            core/target/release/libcrypto-3-x64.dll

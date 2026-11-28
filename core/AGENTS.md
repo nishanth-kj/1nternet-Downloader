@@ -33,5 +33,5 @@ cargo check      # when the exe is locked by a running copy
 - Changing `DownloadSnapshot` fields breaks `tests/` (owner approval needed).
 - After engine changes, run the manual check in
   [testing.md](../docs/contributing/testing.md) with a scratch `APPDATA`.
-- Ignore `CMakeLists.txt`, `CMakePresets.json`, `scripts/build.ps1` and `build/`; they
-  belong to the old C++ app.
+- `scripts/build.ps1` wraps cargo (`-Release`, `-Test`, `-InstallDeps` for libtorrent).
+  `build/` and `out/` are leftovers from the old C++ build.

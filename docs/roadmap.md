@@ -25,13 +25,8 @@
 
 ## Tooling to update
 
-- CI (`build-core.yml`) builds the old CMake project. Switch it to `cargo build --release`
-  and ship the libtorrent DLLs.
-- `core/scripts/build.ps1` is CMake-based; `register_protocol.ps1` defaults to the old exe.
-- `core/vcpkg.json` still lists wxWidgets, curl and the other old dependencies; only
-  libtorrent is needed now.
 - `core/tests/e2e/README.md` describes the C++ app (it needs the owner's OK to change).
-- `core/CMakeLists.txt`, `CMakePresets.json` and `core/build/` belong to the old C++ app.
+- Local `core/build/` and `core/out/` folders are leftovers from the C++ build and can be deleted.
 
 ## Torrent stages
 
