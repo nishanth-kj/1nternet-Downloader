@@ -4,7 +4,7 @@ use crate::config::{
     MIN_SPEED_WINDOW_SAMPLES, MIN_SPLIT_THRESHOLD_BYTES, PROGRESS_POLL_INTERVAL,
     SLIDING_WINDOW_DURATION, SPEED_SAMPLE_INTERVAL_SECS, WORKER_RETRY_DELAY,
 };
-use crate::exception::{DownloadException, IdmException, Result, StorageException};
+use crate::exception::{DownloadException, IdmException, NetworkException, Result, StorageException};
 use crate::model::{DownloadId, DownloadSegment, DownloadSnapshot, DownloadStatus};
 use crate::service::download::{DownloadService, SchedulerService, SpeedMeterService};
 use crate::service::network::NetworkClient;
@@ -147,6 +147,21 @@ impl DynamicScheduler {
 
     pub fn is_all_completed(&self) -> bool {
         self.segments.iter().all(|s| s.is_completed)
+    }
+
+    /// Current last byte of a segment. It can shrink while a worker is streaming,
+    /// when another worker steals the back half.
+    pub fn segment_end(&self, segment_id: u32) -> Option<u64> {
+        self.segments.iter().find(|s| s.segment_id == segment_id).map(|s| s.end_offset)
+    }
+
+    /// Hands an unfinished segment back so any worker can resume it.
+    pub fn release(&mut self, segment_id: u32) {
+        if let Some(seg) = self.segments.iter_mut().find(|s| s.segment_id == segment_id) {
+            if !seg.is_completed {
+                seg.is_active = false;
+            }
+        }
     }
 
     pub fn get_segments(&self) -> Vec<DownloadSegment> {
@@ -360,7 +375,17 @@ impl DownloadTask {
 
         let res = if caps.is_segmented_download_supported() {
             let total_len = caps.content_length.unwrap();
-            self.run_segmented(total_len).await
+            match self.run_segmented(total_len).await {
+                // The probe said ranges work but real requests got 200: use one connection.
+                Err(IdmException::Network(NetworkException::RangeNotSupported(why))) => {
+                    warn!("Download #{}: ranges refused ({}), using a single connection", self.id, why);
+                    let _ = tokio::fs::remove_file(self.destination.with_extension("idm_tmp")).await;
+                    self.downloaded_bytes.store(0, Ordering::SeqCst);
+                    self.live_segments.write().clear();
+                    self.run_single_stream().await
+                }
+                other => other,
+            }
         } else {
             self.run_single_stream().await
         };
@@ -409,8 +434,12 @@ impl DownloadTask {
 
         let mut speed_meter = SpeedMeter::new(0);
         let mut worker_handles = Vec::new();
+        // Set when the server keeps refusing ranges; ends the download with that error.
+        let fatal: Arc<parking_lot::Mutex<Option<IdmException>>> = Arc::new(parking_lot::Mutex::new(None));
+        let max_failures = (self.settings.max_retries as usize).max(3);
 
         for worker_id in 0..worker_count {
+            let fatal_clone = Arc::clone(&fatal);
             let scheduler_clone = Arc::clone(&scheduler);
             let client_clone = self.client.clone();
             let url_clone = self.url.clone();
@@ -419,7 +448,8 @@ impl DownloadTask {
             let downloaded_clone = Arc::clone(&self.downloaded_bytes);
 
             worker_handles.push(crate::service::spawn(async move {
-                while !stop_flag.load(Ordering::Relaxed) {
+                let mut failures = 0usize;
+                while !stop_flag.load(Ordering::Relaxed) && fatal_clone.lock().is_none() {
                     let work = {
                         let mut sched = scheduler_clone.lock();
                         sched.request_work()
@@ -435,9 +465,18 @@ impl DownloadTask {
                         .await;
 
                     let mut stream = match range_stream_res {
-                        Ok(s) => s,
+                        Ok(s) => {
+                            failures = 0;
+                            s
+                        }
                         Err(e) => {
                             warn!("Worker #{} range request failed: {}", worker_id, e);
+                            scheduler_clone.lock().release(work.segment_id);
+                            failures += 1;
+                            if failures >= max_failures {
+                                fatal_clone.lock().get_or_insert(e);
+                                break;
+                            }
                             tokio::time::sleep(WORKER_RETRY_DELAY).await;
                             continue;
                         }
@@ -451,16 +490,28 @@ impl DownloadTask {
 
                         match chunk_res {
                             Ok(chunk) => {
-                                let chunk_len = chunk.len() as u64;
+                                // Another worker may have stolen the back of this segment;
+                                // never write past its current end.
+                                let Some(end) = scheduler_clone.lock().segment_end(work.segment_id) else {
+                                    break;
+                                };
+                                if current_offset > end {
+                                    break;
+                                }
+                                let allowed = (end - current_offset + 1).min(chunk.len() as u64) as usize;
+                                let data = &chunk[..allowed];
+                                let chunk_len = data.len() as u64;
 
                                 {
                                     let mut f = file_clone.lock().await;
                                     if let Err(e) = f.seek(SeekFrom::Start(current_offset)).await {
                                         error!("File seek failed: {}", e);
+                                        fatal_clone.lock().get_or_insert(IdmException::Storage(StorageException::Io(e)));
                                         return;
                                     }
-                                    if let Err(e) = f.write_all(&chunk).await {
+                                    if let Err(e) = f.write_all(data).await {
                                         error!("File write failed: {}", e);
+                                        fatal_clone.lock().get_or_insert(IdmException::Storage(StorageException::Io(e)));
                                         return;
                                     }
                                 }
@@ -468,6 +519,9 @@ impl DownloadTask {
                                 current_offset += chunk_len;
                                 scheduler_clone.lock().record_progress(work.segment_id, chunk_len);
                                 downloaded_clone.fetch_add(chunk_len, Ordering::Relaxed);
+                                if current_offset > end {
+                                    break; // segment (or its shortened part) is done
+                                }
                             }
                             Err(e) => {
                                 warn!("Error reading stream chunk in worker #{}: {}", worker_id, e);
@@ -475,6 +529,8 @@ impl DownloadTask {
                             }
                         }
                     }
+                    // Stream ended or broke: let any worker pick up whatever is left.
+                    scheduler_clone.lock().release(work.segment_id);
                 }
             }));
         }
@@ -489,7 +545,7 @@ impl DownloadTask {
             let snap = self.get_snapshot();
             let _ = self.snapshot_tx.send(snap);
 
-            if is_done || downloaded >= total_bytes {
+            if is_done || fatal.lock().is_some() || worker_handles.iter().all(|h| h.is_finished()) {
                 break;
             }
             tokio::time::sleep(PROGRESS_POLL_INTERVAL).await;
@@ -501,6 +557,16 @@ impl DownloadTask {
 
         if self.stop_requested.load(Ordering::SeqCst) {
             return Ok(());
+        }
+        if let Some(err) = fatal.lock().take() {
+            return Err(err);
+        }
+        if !scheduler.lock().is_all_completed() {
+            return Err(IdmException::Network(NetworkException::TransferInterrupted(format!(
+                "only {} of {} bytes arrived",
+                self.downloaded_bytes.load(Ordering::SeqCst),
+                total_bytes
+            ))));
         }
 
         file_shared
@@ -534,8 +600,17 @@ impl DownloadTask {
             .await
             .map_err(|e| IdmException::Storage(StorageException::Io(e)))?;
 
-        let resume_offset = file.metadata().await.map(|m| m.len()).unwrap_or(0);
-        let (_, mut stream) = self.client.stream_full(&self.url, resume_offset).await?;
+        let mut resume_offset = file.metadata().await.map(|m| m.len()).unwrap_or(0);
+        let (expected_len, mut stream) = match self.client.stream_full(&self.url, resume_offset).await {
+            Err(IdmException::Network(NetworkException::RangeNotSupported(_))) if resume_offset > 0 => {
+                // The server can't resume: start over instead of appending wrong bytes.
+                warn!("Download #{}: server can't resume, restarting from the beginning", self.id);
+                file.set_len(0).await.map_err(|e| IdmException::Storage(StorageException::Io(e)))?;
+                resume_offset = 0;
+                self.client.stream_full(&self.url, 0).await?
+            }
+            other => other?,
+        };
 
         file.seek(SeekFrom::Start(resume_offset))
             .await
@@ -564,6 +639,17 @@ impl DownloadTask {
         file.flush()
             .await
             .map_err(|e| IdmException::Storage(StorageException::Io(e)))?;
+        // Never call it complete if the server stopped early.
+        if let Some(len) = expected_len {
+            let got = self.downloaded_bytes.load(Ordering::SeqCst);
+            if got != resume_offset + len {
+                return Err(IdmException::Network(NetworkException::TransferInterrupted(format!(
+                    "received {} of {} bytes",
+                    got,
+                    resume_offset + len
+                ))));
+            }
+        }
         self.atomic_finalize(&temp_path).await?;
         Ok(())
     }
