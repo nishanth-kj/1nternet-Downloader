@@ -1,17 +1,34 @@
-# Project documentation
+# Documentation
 
-This directory contains the maintained technical documentation for 1nternet Downloader.
+Start with the overview, then open the folder for the part you're working on.
 
-| Document | Contents |
+| Document | What it covers |
 | --- | --- |
-| [Architecture](architecture.md) | Components, responsibilities, and data flow |
-| [Development setup](development.md) | Prerequisites, build commands, and troubleshooting |
-| [Platform support](platforms.md) | Desktop, Android, browser, and website support |
-| [Releases](releases.md) | Build outputs, packaging, and release expectations |
-| [Download correctness checklist](DOWNLOAD_CORRECTNESS_CHECKLIST.md) | Manual and release acceptance checks |
+| [overview.md](overview.md) | The four products, how they connect, platform support |
+| [roadmap.md](roadmap.md) | What works, known bugs, planned stages |
 
-The root [README](../README.md) is the user-facing project overview and quick start.
+## Desktop app (`core/`)
 
-The engine design, requirements, conventions and roadmap are in [`agents/`](../agents/README.md).
+| Document | What it covers |
+| --- | --- |
+| [desktop/building.md](desktop/building.md) | Build, run, test, and try changes safely |
+| [desktop/architecture.md](desktop/architecture.md) | Source layout, threading, download engine, storage, IPC |
+| [desktop/ui.md](desktop/ui.md) | Window layout, dialogs, themes, saved preferences |
+| [desktop/torrents.md](desktop/torrents.md) | libtorrent bridge (C++ ↔ Rust) and its limits |
 
-Keep documentation aligned with the implementation. Avoid duplicating setup instructions across multiple files.
+## Other products
+
+| Document | What it covers |
+| --- | --- |
+| [browser/extension.md](browser/extension.md) | Browser extension: handoff, video detection, keeping six copies in sync |
+| [android/README.md](android/README.md) | Android app: build, layout, rules |
+
+## Contributing
+
+| Document | What it covers |
+| --- | --- |
+| [contributing/conventions.md](contributing/conventions.md) | Rules that must not be broken, and code style |
+| [contributing/testing.md](contributing/testing.md) | How to verify changes, and the release checklist |
+| [contributing/workflow.md](contributing/workflow.md) | Branches, versions, CI, releases |
+
+If a document disagrees with the code, trust the code and fix the document in the same change.
